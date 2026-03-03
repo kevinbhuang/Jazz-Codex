@@ -1170,12 +1170,15 @@ function renderTutorialModule() {
     <section class="lesson-block">
       <h3>Interactive Builder</h3>
       <div class="builder-controls">
-        <label>
-          Root
-          <select id="builderRoot">
-            ${ROOT_NOTE_OPTIONS.map((note) => `<option value="${note}" ${tutorialBuilderState.root === note ? "selected" : ""}>${note}</option>`).join("")}
-          </select>
-        </label>
+        <div class="builder-root-wrap">
+          <span>Root</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Root note">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="root-choice ${tutorialBuilderState.root === note ? "active" : ""}" data-root-option="${note}" aria-pressed="${tutorialBuilderState.root === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
         <label>
           <span>Add 5th</span>
           <input id="builderIncludeFifth" type="checkbox" ${tutorialBuilderState.includeFifth ? "checked" : ""}/>
@@ -1219,7 +1222,7 @@ function renderTutorialModule() {
 }
 
 function wireTutorialModule() {
-  const rootSelect = document.getElementById("builderRoot");
+  const rootButtons = lessonContent.querySelectorAll("[data-root-option]");
   const includeFifthInput = document.getElementById("builderIncludeFifth");
   const extensionButtons = lessonContent.querySelectorAll("[data-extension-option]");
 
@@ -1227,12 +1230,12 @@ function wireTutorialModule() {
     renderLesson();
   };
 
-  if (rootSelect) {
-    rootSelect.addEventListener("change", () => {
-      tutorialBuilderState.root = rootSelect.value;
+  rootButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      tutorialBuilderState.root = button.dataset.rootOption || "C";
       rerender();
     });
-  }
+  });
 
   if (includeFifthInput) {
     includeFifthInput.addEventListener("change", () => {
