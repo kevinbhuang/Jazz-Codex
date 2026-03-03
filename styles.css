@@ -530,6 +530,10 @@ button {
   white-space: nowrap;
 }
 
+.apply-scale-grid {
+  margin-top: 0.65rem;
+}
+
 .builder-stack {
   display: grid;
   gap: 0.55rem;

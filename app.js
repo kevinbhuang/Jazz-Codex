@@ -60,6 +60,12 @@ const MODULES = [
     title: "Top 5 Jazz Scales",
     blurb: "Map scales directly to chord qualities in real progressions.",
   },
+  {
+    id: "play_along_loop",
+    kind: "playalong",
+    title: "Play-Along Loop",
+    blurb: "Simple drum + bass loop with adjustable tempo.",
+  },
 ];
 
 const ROOT_NOTE_OPTIONS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -74,6 +80,12 @@ const scaleModuleState = {
   root: "C",
   scaleId: "ionian",
   applyModuleId: "major_iivi",
+};
+
+const playAlongState = {
+  progressionId: "major_iivi",
+  key: "C",
+  tempo: 90,
 };
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
@@ -388,6 +400,7 @@ const backingTrackState = {
   isPlaying: false,
   moduleId: null,
   bars: [],
+  mode: "comping",
   tempo: 80,
   nextNoteTime: 0,
   step: 0,
@@ -482,10 +495,14 @@ function getTransposedBarsForModule(moduleId, data) {
   const moduleData = data || PROGRESSION_DATA[moduleId];
   const tonic = moduleData.tonic || "C";
   const selectedKey = transposeSelectionByModule[moduleId] || tonic;
+  return transposeBarsFromTonic(moduleData.bars, tonic, selectedKey);
+}
+
+function transposeBarsFromTonic(bars, tonic, selectedKey) {
   const shift = (noteToIndex(selectedKey) - noteToIndex(tonic) + 12) % 12;
-  if (shift === 0) return [...moduleData.bars];
+  if (shift === 0) return [...bars];
   const preferFlats = selectedKey.includes("b");
-  return moduleData.bars.map((chord) => transposeChordSymbol(chord, shift, preferFlats));
+  return bars.map((chord) => transposeChordSymbol(chord, shift, preferFlats));
 }
 
 function recommendedScaleIdForQuality(quality) {
@@ -539,6 +556,11 @@ function scaleRunFrequencies(root, scaleId, zone) {
     return [...freqs, ...descending];
   }
   return freqs;
+}
+
+function scaleIdLabel(scaleId) {
+  const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
+  return scale.name;
 }
 
 function rootCandidates(root, rootString) {
@@ -1178,7 +1200,12 @@ function scheduleBeat() {
   const chord = backingTrackState.bars[barIndex];
   const time = backingTrackState.nextNoteTime;
 
-  scheduleCompingChord(time, chord, beatInBar);
+  if (backingTrackState.mode === "playalong") {
+    scheduleClick(time, beatInBar);
+    scheduleBass(time, chord, beatInBar);
+  } else {
+    scheduleCompingChord(time, chord, beatInBar);
+  }
   queuePlaybackUi(barIndex, beatInBar, time);
 
   backingTrackState.nextNoteTime += 60 / backingTrackState.tempo;
@@ -1219,7 +1246,7 @@ function stopBackingTrack(statusMessage = "Stopped") {
   }
 }
 
-async function startBackingTrack(moduleId, bars, tempo, statusEl, startBtn, stopBtn, barEls) {
+async function startBackingTrack(moduleId, bars, tempo, statusEl, startBtn, stopBtn, barEls, options = {}) {
   if (backingTrackState.isPlaying) {
     stopBackingTrack();
   }
@@ -1232,6 +1259,7 @@ async function startBackingTrack(moduleId, bars, tempo, statusEl, startBtn, stop
 
   backingTrackState.moduleId = moduleId;
   backingTrackState.bars = bars;
+  backingTrackState.mode = options.mode === "playalong" ? "playalong" : "comping";
   backingTrackState.tempo = tempo;
   backingTrackState.step = 0;
   backingTrackState.nextNoteTime = backingTrackState.audioCtx.currentTime + 0.05;
@@ -1517,6 +1545,19 @@ function renderScaleModule() {
       return `<div class="bar-item ${active}">Bar ${idx + 1}: <strong>${chord}</strong><br/><small>Recommended: ${recommended.name}</small></div>`;
     })
     .join("");
+  const applyScaleDiagrams = applyBars
+    .map((chord, idx) => {
+      const root = parseChordRoot(chord) || scaleModuleState.root;
+      const scaleId = recommendedScaleIdForChord(chord);
+      return `
+        <article class="chord-card">
+          <h4>Bar ${idx + 1}: ${chord}</h4>
+          <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
+          ${renderScaleDiagram(root, scaleId, "low")}
+        </article>
+      `;
+    })
+    .join("");
 
   return `
     <section class="lesson-block">
@@ -1577,6 +1618,7 @@ function renderScaleModule() {
       </label>
       <p class="tutorial-card-copy">Bars highlighted in gold match your currently selected scale.</p>
       <div class="bar-grid">${applyMarkup}</div>
+      <div class="diagram-grid tutorial-grid apply-scale-grid">${applyScaleDiagrams}</div>
     </section>
   `;
 }
@@ -1623,6 +1665,106 @@ function wireScaleModule() {
       await playScaleOverChordPreview(scaleModuleState.root, scaleModuleState.scaleId);
     });
   }
+}
+
+function renderPlayAlongModule() {
+  const module = PROGRESSION_MODULES.find((item) => item.id === playAlongState.progressionId) || PROGRESSION_MODULES[0];
+  const data = PROGRESSION_DATA[module.id];
+  const bars = transposeBarsFromTonic(data.bars, data.tonic || "C", playAlongState.key);
+  const barsMarkup = bars
+    .map((chord, idx) => `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
+    .join("");
+
+  return `
+    <section class="lesson-block">
+      <h3>Step 4: Play-Along Loop</h3>
+      <p>Simple drum + bass groove so you can comp or solo over real harmonic motion.</p>
+      <div class="practice-player">
+        <label>
+          Progression
+          <select id="playAlongProgressionSelect" class="tempo-input">
+            ${PROGRESSION_MODULES.map(
+              (item) => `<option value="${item.id}" ${item.id === module.id ? "selected" : ""}>${item.title}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <div class="transpose-chip-wrap">
+          <span>Key</span>
+          <div class="transpose-chip-group" role="radiogroup" aria-label="Play-along key">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="transpose-choice ${playAlongState.key === note ? "active" : ""}" data-playalong-key-option="${note}" aria-pressed="${playAlongState.key === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
+        <label>
+          Tempo (BPM)
+          <input id="playAlongTempoInput" class="tempo-input" type="number" min="50" max="220" value="${playAlongState.tempo}" />
+        </label>
+        <div class="player-controls">
+          <button id="startPlayAlongBtn" class="start-track-btn" type="button">Start Play-Along Loop</button>
+          <button id="stopPlayAlongBtn" class="stop-track-btn" type="button" disabled>Stop</button>
+        </div>
+        <p id="playAlongStatus" class="track-status">Stopped</p>
+      </div>
+      <div class="bar-grid">${barsMarkup}</div>
+    </section>
+  `;
+}
+
+function wirePlayAlongModule() {
+  const progressionSelect = document.getElementById("playAlongProgressionSelect");
+  const tempoInput = document.getElementById("playAlongTempoInput");
+  const startBtn = document.getElementById("startPlayAlongBtn");
+  const stopBtn = document.getElementById("stopPlayAlongBtn");
+  const statusEl = document.getElementById("playAlongStatus");
+  const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
+  const keyButtons = lessonContent.querySelectorAll("[data-playalong-key-option]");
+
+  if (!progressionSelect || !tempoInput || !startBtn || !stopBtn || !statusEl) return;
+
+  progressionSelect.addEventListener("change", () => {
+    playAlongState.progressionId = progressionSelect.value;
+    stopBackingTrack();
+    renderLesson();
+  });
+
+  keyButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      playAlongState.key = button.dataset.playalongKeyOption || "C";
+      stopBackingTrack();
+      renderLesson();
+    });
+  });
+
+  startBtn.addEventListener("click", async () => {
+    try {
+      const tempo = clampTempo(Number(tempoInput.value));
+      playAlongState.tempo = tempo;
+      tempoInput.value = String(tempo);
+      const module = PROGRESSION_MODULES.find((item) => item.id === playAlongState.progressionId) || PROGRESSION_MODULES[0];
+      const data = PROGRESSION_DATA[module.id];
+      const bars = transposeBarsFromTonic(data.bars, data.tonic || "C", playAlongState.key);
+      await startBackingTrack("play_along_loop", bars, tempo, statusEl, startBtn, stopBtn, barEls, { mode: "playalong" });
+    } catch (error) {
+      console.error(error);
+      stopBackingTrack("Unable to start: " + String(error.message || error));
+    }
+  });
+
+  stopBtn.addEventListener("click", () => {
+    stopBackingTrack();
+  });
+
+  tempoInput.addEventListener("change", () => {
+    const tempo = clampTempo(Number(tempoInput.value));
+    playAlongState.tempo = tempo;
+    tempoInput.value = String(tempo);
+    if (backingTrackState.isPlaying && backingTrackState.moduleId === "play_along_loop") {
+      backingTrackState.tempo = tempo;
+      statusEl.textContent = `Tempo changed to ${tempo} BPM`;
+    }
+  });
 }
 
 function renderProgressionModule(module) {
@@ -1759,6 +1901,12 @@ function renderLesson() {
     return;
   }
 
+  if (module.kind === "playalong") {
+    lessonContent.innerHTML = renderPlayAlongModule();
+    wirePlayAlongModule();
+    return;
+  }
+
   lessonContent.innerHTML = renderProgressionModule(module);
   wireChordPreviewButtons();
   wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
@@ -1768,6 +1916,7 @@ function renderModuleNav() {
   const step1Module = MODULES.find((module) => module.kind === "tutorial");
   const step2Modules = PROGRESSION_MODULES;
   const step3Module = MODULES.find((module) => module.kind === "scales");
+  const step4Module = MODULES.find((module) => module.kind === "playalong");
 
   const step2Markup = step2Modules
     .map((module, idx) => {
@@ -1799,6 +1948,13 @@ function renderModuleNav() {
         <small>${step3Module.blurb}</small>
       </button>
     </li>
+    <li class="nav-section">Step 4: Play-Along</li>
+    <li>
+      <button type="button" data-module-id="${step4Module.id}">
+        <strong>${step4Module.title}</strong>
+        <small>${step4Module.blurb}</small>
+      </button>
+    </li>
   `;
 
   moduleNav.querySelectorAll("button").forEach((button) => {
@@ -1819,14 +1975,17 @@ function setActiveModule(moduleId) {
   safeSetStoredModule(activeModuleId);
 
   if (module.kind === "tutorial") {
-    stageModuleLabel.textContent = "Step 1 of 3";
+    stageModuleLabel.textContent = "Step 1 of 4";
     stageTitle.textContent = module.title;
   } else if (module.kind === "progression") {
     const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
-    stageModuleLabel.textContent = `Step 2 of 3 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
+    stageModuleLabel.textContent = `Step 2 of 4 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
+    stageTitle.textContent = module.title;
+  } else if (module.kind === "scales") {
+    stageModuleLabel.textContent = "Step 3 of 4 - Scales";
     stageTitle.textContent = module.title;
   } else {
-    stageModuleLabel.textContent = "Step 3 of 3 - Scales";
+    stageModuleLabel.textContent = "Step 4 of 4 - Play-Along";
     stageTitle.textContent = module.title;
   }
 
