@@ -81,6 +81,7 @@ const playAlongState = {
   progressionId: "major_iivi",
   key: "C",
   tempo: 90,
+  includeDrums: true,
 };
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
@@ -1089,30 +1090,9 @@ async function playScalePreview(root, scaleId, zone) {
   const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
   if (!runFrequencies.length) return;
   playScaleRun(ctx, runFrequencies, ctx.currentTime, {
-    stepSeconds: 0.145,
+    stepSeconds: 0.32,
     peakGain: 0.1,
-    releaseSeconds: 0.28,
-  });
-}
-
-async function playScaleOverChordPreview(root, scaleId) {
-  const ctx = await getAudioContext();
-  const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
-  const zone = "mid";
-  const chordSymbol = chordSymbolFromRootQuality(root, scale.targetQuality);
-  const chordNotes = chordFrequenciesFromSymbol(chordSymbol, zone);
-  const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
-  if (!chordNotes.length || !runFrequencies.length) return;
-
-  playGuitarStrum(ctx, chordNotes, ctx.currentTime, {
-    strumGap: 0.026,
-    peakGain: 0.1,
-    releaseSeconds: 2.2,
-  });
-  playScaleRun(ctx, runFrequencies, ctx.currentTime + 0.28, {
-    stepSeconds: 0.135,
-    peakGain: 0.09,
-    releaseSeconds: 0.26,
+    releaseSeconds: 0.42,
   });
 }
 
@@ -1209,8 +1189,10 @@ function scheduleBeat() {
   const time = backingTrackState.nextNoteTime;
 
   if (backingTrackState.mode === "playalong") {
-    scheduleClick(time, beatInBar);
-    scheduleBass(time, chord, beatInBar);
+    scheduleCompingChord(time, chord, beatInBar);
+    if (playAlongState.includeDrums) {
+      scheduleClick(time, beatInBar);
+    }
   } else {
     scheduleCompingChord(time, chord, beatInBar);
   }
@@ -1598,7 +1580,6 @@ function renderScaleModule() {
       <div class="player-controls">
         <button type="button" class="start-track-btn" id="playScaleLowBtn">Play Scale (Low Zone)</button>
         <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Scale (Mid Zone)</button>
-        <button type="button" class="start-track-btn" id="playScaleOverChordBtn">Play Over Chord</button>
       </div>
       <h4>Scale Fingerboards</h4>
       <div class="diagram-grid">
@@ -1661,6 +1642,10 @@ function renderScaleModule() {
         <label>
           Tempo (BPM)
           <input id="playAlongTempoInput" class="tempo-input" type="number" min="50" max="220" value="${playAlongState.tempo}" />
+        </label>
+        <label>
+          <input id="playAlongDrumsToggle" type="checkbox" ${playAlongState.includeDrums ? "checked" : ""} />
+          Include drum beat
         </label>
         <div class="player-controls">
           <button id="startPlayAlongBtn" class="start-track-btn" type="button">Start Play-Along Loop</button>
@@ -1727,7 +1712,6 @@ function wireScaleModule() {
 
   const playLowBtn = document.getElementById("playScaleLowBtn");
   const playMidBtn = document.getElementById("playScaleMidBtn");
-  const playOverBtn = document.getElementById("playScaleOverChordBtn");
 
   if (playLowBtn) {
     playLowBtn.addEventListener("click", async () => {
@@ -1739,11 +1723,6 @@ function wireScaleModule() {
       await playScalePreview(scaleModuleState.root, scaleModuleState.scaleId, "mid");
     });
   }
-  if (playOverBtn) {
-    playOverBtn.addEventListener("click", async () => {
-      await playScaleOverChordPreview(scaleModuleState.root, scaleModuleState.scaleId);
-    });
-  }
 
   wirePlayAlongModule();
 }
@@ -1751,6 +1730,7 @@ function wireScaleModule() {
 function wirePlayAlongModule() {
   const progressionSelect = document.getElementById("playAlongProgressionSelect");
   const tempoInput = document.getElementById("playAlongTempoInput");
+  const drumsToggle = document.getElementById("playAlongDrumsToggle");
   const startBtn = document.getElementById("startPlayAlongBtn");
   const stopBtn = document.getElementById("stopPlayAlongBtn");
   const statusEl = document.getElementById("playAlongStatus");
@@ -1772,6 +1752,17 @@ function wirePlayAlongModule() {
       renderLesson();
     });
   });
+
+  if (drumsToggle) {
+    drumsToggle.addEventListener("change", () => {
+      playAlongState.includeDrums = drumsToggle.checked;
+      if (backingTrackState.isPlaying && backingTrackState.moduleId === "play_along_loop") {
+        statusEl.textContent = playAlongState.includeDrums
+          ? "Drum beat enabled"
+          : "Drum beat disabled";
+      }
+    });
+  }
 
   startBtn.addEventListener("click", async () => {
     try {
