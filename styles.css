@@ -34,12 +34,12 @@ body {
 }
 
 .app-shell {
-  max-width: 1240px;
+  max-width: 1520px;
   margin: 0 auto;
   padding: 1.2rem;
   display: grid;
   gap: 1rem;
-  grid-template-columns: 320px 1fr;
+  grid-template-columns: 260px minmax(0, 1fr);
 }
 
 .sidebar {
@@ -120,8 +120,8 @@ body {
   border: 1px solid var(--line);
   border-radius: 18px;
   box-shadow: 0 14px 26px rgba(0, 0, 0, 0.07);
-  padding: 1rem 1.2rem;
-  min-height: 760px;
+  padding: 0.8rem 1rem;
+  min-height: 720px;
 }
 
 .stage-header {
@@ -172,14 +172,14 @@ button {
   animation: fadeIn 220ms ease;
   padding-top: 1rem;
   display: grid;
-  gap: 1rem;
+  gap: 0.8rem;
 }
 
 .lesson-block {
   background: #fff;
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0.85rem;
+  padding: 0.7rem;
 }
 
 .lesson-block h3 {
@@ -207,7 +207,7 @@ button {
 .bar-grid {
   display: grid;
   gap: 0.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
   margin: 0.75rem 0;
 }
 
@@ -226,19 +226,19 @@ button {
 .diagram-grid {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(236px, 1fr));
 }
 
 .chord-card {
   border: 1px solid var(--line);
   border-radius: 12px;
-  padding: 0.7rem;
+  padding: 0.42rem;
   background: #fff;
 }
 
 .chord-card h4 {
   margin: 0 0 0.25rem;
-  font-size: 1.05rem;
+  font-size: 0.95rem;
 }
 
 .mini {
@@ -251,8 +251,8 @@ button {
 .diagram {
   display: block;
   width: 100%;
-  max-width: 400px;
-  margin-top: 0.45rem;
+  max-width: 290px;
+  margin-top: 0.2rem;
 }
 
 .song-list {
@@ -335,13 +335,13 @@ button {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 0.5rem;
-  margin-bottom: 0.25rem;
+  gap: 0.4rem;
+  margin-bottom: 0.1rem;
 }
 
 .play-chord-btn {
-  width: 2rem;
-  height: 2rem;
+  width: 1.75rem;
+  height: 1.75rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
@@ -361,4 +361,93 @@ button {
 
 .practice-player label {
   margin-right: 0.7rem;
+}
+
+.fingering-controls {
+  margin-bottom: 0.55rem;
+}
+
+.nav-section {
+  margin-top: 0.35rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.77rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+}
+
+.tutorial-list {
+  margin: 0.4rem 0 0;
+  padding-left: 1.2rem;
+}
+
+.tutorial-list li {
+  margin-bottom: 0.25rem;
+}
+
+.formula-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+
+.formula-table th,
+.formula-table td {
+  border: 1px solid var(--line);
+  padding: 0.4rem 0.45rem;
+  text-align: left;
+}
+
+.formula-table th {
+  background: color-mix(in oklab, var(--accent-3), white 35%);
+}
+
+.tutorial-grid {
+  grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
+}
+
+.tutorial-card-copy {
+  margin: 0.3rem 0 0;
+  color: var(--muted);
+  font-size: 0.84rem;
+}
+
+.builder-controls {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  margin-bottom: 0.7rem;
+}
+
+.builder-controls label {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+}
+
+.builder-controls select {
+  width: 100%;
+}
+
+.builder-output {
+  display: grid;
+  justify-items: start;
+}
+
+.builder-card {
+  max-width: 340px;
+}
+
+.play-tutorial-chord-btn {
+  width: 1.75rem;
+  height: 1.75rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.play-tutorial-chord-btn:hover {
+  border-color: var(--accent-2);
 }
