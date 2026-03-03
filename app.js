@@ -75,7 +75,6 @@ const scaleModuleState = {
   scaleId: "ionian",
   applyModuleId: "major_iivi",
   applyKey: "C",
-  includeEnclosures: false,
 };
 
 const playAlongState = {
@@ -744,16 +743,6 @@ function scaleChordToneFrequencies(root, scaleId, zone) {
   return chordToneIntervals.map((interval) => 440 * Math.pow(2, (rootMidi + interval - 69) / 12));
 }
 
-function enclosedToneRun(frequencies) {
-  const out = [];
-  frequencies.forEach((f) => {
-    const up = f * Math.pow(2, 1 / 12);
-    const down = f * Math.pow(2, -1 / 12);
-    out.push(up, down, f);
-  });
-  return out;
-}
-
 function scaleIdLabel(scaleId) {
   const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
   return scale.name;
@@ -1300,13 +1289,12 @@ async function playScalePreview(root, scaleId, zone) {
   const chordTones = scaleChordToneFrequencies(root, scaleId, zone);
   const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
   if (!runFrequencies.length || !chordTones.length) return;
-  const leadIn = scaleModuleState.includeEnclosures ? enclosedToneRun(chordTones) : chordTones;
-  playScaleRun(ctx, leadIn, ctx.currentTime, {
-    stepSeconds: scaleModuleState.includeEnclosures ? 0.16 : 0.24,
+  playScaleRun(ctx, chordTones, ctx.currentTime, {
+    stepSeconds: 0.24,
     peakGain: 0.095,
     releaseSeconds: 0.22,
   });
-  const offset = leadIn.length * (scaleModuleState.includeEnclosures ? 0.16 : 0.24) + 0.14;
+  const offset = chordTones.length * 0.24 + 0.14;
   playScaleRun(ctx, runFrequencies, ctx.currentTime + offset, {
     stepSeconds: 0.42,
     peakGain: 0.1,
@@ -2046,10 +2034,6 @@ function renderScaleModule() {
         </div>
       </div>
       <p><strong>Formula:</strong> ${scale.formula} <span class="chip">${scale.targetLabel}</span></p>
-      <label>
-        <input id="scaleEnclosureToggle" type="checkbox" ${scaleModuleState.includeEnclosures ? "checked" : ""} />
-        Add enclosures / approach notes before chord tones
-      </label>
       <div class="player-controls">
         <button type="button" class="start-track-btn" id="playScaleLowBtn">Play Jazz Scale (Low Zone)</button>
         <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Jazz Scale (Mid Zone)</button>
@@ -2215,7 +2199,6 @@ function wireScaleModule() {
 
   const playLowBtn = document.getElementById("playScaleLowBtn");
   const playMidBtn = document.getElementById("playScaleMidBtn");
-  const enclosureToggle = document.getElementById("scaleEnclosureToggle");
 
   if (playLowBtn) {
     playLowBtn.addEventListener("click", async () => {
@@ -2225,11 +2208,6 @@ function wireScaleModule() {
   if (playMidBtn) {
     playMidBtn.addEventListener("click", async () => {
       await playScalePreview(scaleModuleState.root, scaleModuleState.scaleId, "mid");
-    });
-  }
-  if (enclosureToggle) {
-    enclosureToggle.addEventListener("change", () => {
-      scaleModuleState.includeEnclosures = enclosureToggle.checked;
     });
   }
 
