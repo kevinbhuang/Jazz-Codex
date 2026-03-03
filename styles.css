@@ -489,6 +489,23 @@ button {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.examples-divider {
+  border-top: 2px dashed var(--line);
+  padding-top: 0.65rem;
+  margin-top: 0.15rem;
+}
+
+.examples-divider h3 {
+  margin: 0;
+  font-size: 1.02rem;
+}
+
+.examples-divider p {
+  margin: 0.22rem 0 0;
+  color: var(--muted);
+  font-size: 0.88rem;
+}
+
 .play-tutorial-chord-btn {
   width: 1.75rem;
   height: 1.75rem;

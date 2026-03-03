@@ -477,15 +477,34 @@ function chooseClosestFret(candidates, anchorFret) {
   return pool.sort((a, b) => Math.abs(a - anchorFret) - Math.abs(b - anchorFret) || a - b)[0];
 }
 
-function placeIntervalOnString(frets, stringNumber, interval, rootIndex, anchorFret) {
-  const arrayIdx = 6 - stringNumber;
-  if (frets[arrayIdx] !== "x") return frets;
-  const targetNoteIndex = (rootIndex + interval + 12) % 12;
-  const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
-  const fret = chooseClosestFret(candidates, anchorFret);
-  if (!Number.isInteger(fret) || fret < 0 || fret > 16) return frets;
+function placeIntervalOnBestString(frets, preferredStrings, interval, rootIndex, anchorFret) {
+  const windowMin = Math.max(0, anchorFret - 1);
+  const windowMax = Math.min(16, anchorFret + 3);
+  const ranked = [];
+
+  preferredStrings.forEach((stringNumber, rank) => {
+    const arrayIdx = 6 - stringNumber;
+    if (frets[arrayIdx] !== "x") return;
+
+    const targetNoteIndex = (rootIndex + interval + 12) % 12;
+    const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
+    candidates.forEach((fret) => {
+      const inWindow = fret >= windowMin && fret <= windowMax;
+      const distance = Math.abs(fret - anchorFret);
+      const outsidePenalty = inWindow ? 0 : 12;
+      ranked.push({
+        stringNumber,
+        fret,
+        score: outsidePenalty + distance + rank * 0.2,
+      });
+    });
+  });
+
+  if (!ranked.length) return frets;
+  ranked.sort((a, b) => a.score - b.score || a.fret - b.fret);
+  const best = ranked[0];
   const next = [...frets];
-  next[arrayIdx] = fret;
+  next[6 - best.stringNumber] = best.fret;
   return next;
 }
 
@@ -496,20 +515,20 @@ function applyBuilderOptionsToFrets(frets, template, rootIndex, anchorFret, opti
   let next = [...frets];
   if (template.rootString === 6) {
     if (includeFifth) {
-      next = placeIntervalOnString(next, 2, 7, rootIndex, anchorFret);
+      next = placeIntervalOnBestString(next, [2, 5, 1], 7, rootIndex, anchorFret);
     }
     if (extensionInterval !== null) {
-      next = placeIntervalOnString(next, 1, extensionInterval, rootIndex, anchorFret);
+      next = placeIntervalOnBestString(next, [2, 5, 1], extensionInterval, rootIndex, anchorFret);
     }
     return next;
   }
 
   if (template.rootString === 5) {
     if (includeFifth) {
-      next = placeIntervalOnString(next, 4, 7, rootIndex, anchorFret);
+      next = placeIntervalOnBestString(next, [4, 1, 6], 7, rootIndex, anchorFret);
     }
     if (extensionInterval !== null) {
-      next = placeIntervalOnString(next, 1, extensionInterval, rootIndex, anchorFret);
+      next = placeIntervalOnBestString(next, [1, 4, 6], extensionInterval, rootIndex, anchorFret);
     }
   }
   return next;
@@ -1030,6 +1049,10 @@ function tutorialFormulaWithOptions(baseFormula, includeFifth, extension) {
   return tones.join(" ");
 }
 
+function voicingHasDegree(voicing, degree) {
+  return voicing.tones.some((tone) => tone && tone.degree === degree);
+}
+
 function displayChordSymbol(root, quality, includeFifth, extension) {
   const base = chordSymbolFromRootQuality(root, quality);
   const extras = [];
@@ -1075,7 +1098,10 @@ function renderTutorialBuilderCard(root, quality, rootString, zone, includeFifth
   if (!voicing) return "";
 
   const summary = qualitySummary(quality);
-  const formula = tutorialFormulaWithOptions(summary.formula, includeFifth, extension);
+  const effectiveIncludeFifth = includeFifth && voicingHasDegree(voicing, "5");
+  const effectiveExtension =
+    extension && extension !== "none" && voicingHasDegree(voicing, extension) ? extension : "none";
+  const formula = tutorialFormulaWithOptions(summary.formula, effectiveIncludeFifth, effectiveExtension);
   return `
     <article class="chord-card">
       <div class="chord-card-top">
@@ -1142,16 +1168,6 @@ function renderTutorialModule() {
 
   return `
     <section class="lesson-block">
-      <h3>6th-String Root Shell Examples (C Root)</h3>
-      <div class="diagram-grid tutorial-grid">${root6Cards}</div>
-    </section>
-
-    <section class="lesson-block">
-      <h3>5th-String Root Shell Examples (C Root)</h3>
-      <div class="diagram-grid tutorial-grid">${root5Cards}</div>
-    </section>
-
-    <section class="lesson-block">
       <h3>Interactive Builder</h3>
       <div class="builder-controls">
         <label>
@@ -1183,6 +1199,21 @@ function renderTutorialModule() {
           <div class="diagram-grid tutorial-grid builder-fixed-grid">${builderBottomRow || "<p>Unable to build bottom row voicings.</p>"}</div>
         </div>
       </div>
+    </section>
+
+    <section class="examples-divider" aria-label="Examples section">
+      <h3>Reference Examples</h3>
+      <p>Static example voicings for C root.</p>
+    </section>
+
+    <section class="lesson-block">
+      <h3>6th-String Root Shell Examples (C Root)</h3>
+      <div class="diagram-grid tutorial-grid">${root6Cards}</div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>5th-String Root Shell Examples (C Root)</h3>
+      <div class="diagram-grid tutorial-grid">${root5Cards}</div>
     </section>
   `;
 }
