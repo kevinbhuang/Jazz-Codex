@@ -74,6 +74,7 @@ const scaleModuleState = {
   root: "C",
   scaleId: "ionian",
   applyModuleId: "major_iivi",
+  applyKey: "C",
 };
 
 const playAlongState = {
@@ -1530,7 +1531,9 @@ function renderScaleModule() {
   const scale = SCALE_LIBRARY[scaleModuleState.scaleId] || SCALE_LIBRARY.ionian;
   const applyProgression = PROGRESSION_MODULES.find((module) => module.id === scaleModuleState.applyModuleId) || PROGRESSION_MODULES[0];
   const applyData = applyProgression ? PROGRESSION_DATA[applyProgression.id] : null;
-  const applyBars = applyData ? getTransposedBarsForModule(applyProgression.id, applyData) : [];
+  const applyBars = applyData
+    ? transposeBarsFromTonic(applyData.bars, applyData.tonic || "C", scaleModuleState.applyKey)
+    : [];
   const applyMarkup = applyBars
     .map((chord, idx) => {
       const recommendedId = recommendedScaleIdForChord(chord);
@@ -1610,6 +1613,15 @@ function renderScaleModule() {
           ).join("")}
         </select>
       </label>
+      <div class="transpose-chip-wrap">
+        <span>Key</span>
+        <div class="transpose-chip-group" role="radiogroup" aria-label="Apply progression key">
+          ${ROOT_NOTE_OPTIONS.map(
+            (note) =>
+              `<button type="button" class="transpose-choice ${scaleModuleState.applyKey === note ? "active" : ""}" data-apply-key-option="${note}" aria-pressed="${scaleModuleState.applyKey === note ? "true" : "false"}">${note}</button>`
+          ).join("")}
+        </div>
+      </div>
       <p class="tutorial-card-copy">Bars highlighted in gold match your currently selected scale.</p>
       <div class="bar-grid">${applyMarkup}</div>
       <div class="diagram-grid tutorial-grid apply-scale-grid">${applyScaleDiagrams}</div>
@@ -1653,6 +1665,23 @@ function renderScaleModule() {
       )
         .map((chord, idx) => `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
         .join("")}</div>
+      <div class="diagram-grid tutorial-grid apply-scale-grid">${transposeBarsFromTonic(
+        (PROGRESSION_DATA[playAlongState.progressionId] || PROGRESSION_DATA.major_iivi).bars,
+        (PROGRESSION_DATA[playAlongState.progressionId] || PROGRESSION_DATA.major_iivi).tonic || "C",
+        playAlongState.key
+      )
+        .map((chord, idx) => {
+          const root = parseChordRoot(chord) || playAlongState.key;
+          const scaleId = recommendedScaleIdForChord(chord);
+          return `
+            <article class="chord-card">
+              <h4>Bar ${idx + 1}: ${chord}</h4>
+              <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
+              ${renderScaleDiagram(root, scaleId, "low")}
+            </article>
+          `;
+        })
+        .join("")}</div>
     </section>
   `;
 }
@@ -1679,6 +1708,12 @@ function wireScaleModule() {
       renderLesson();
     });
   }
+  lessonContent.querySelectorAll("[data-apply-key-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scaleModuleState.applyKey = button.dataset.applyKeyOption || "C";
+      renderLesson();
+    });
+  });
 
   const playLowBtn = document.getElementById("playScaleLowBtn");
   const playMidBtn = document.getElementById("playScaleMidBtn");
