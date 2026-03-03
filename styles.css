@@ -228,7 +228,7 @@ label {
 .voicing-cards {
   display: grid;
   gap: 0.75rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
 }
 
 .voicing-card {
@@ -238,10 +238,17 @@ label {
   padding: 0.65rem;
 }
 
+.finger-line {
+  display: inline-block;
+  margin-top: 0.2rem;
+  color: var(--accent);
+  font-family: "IBM Plex Mono", monospace;
+}
+
 .diagram {
   display: block;
   width: 100%;
-  max-width: 220px;
+  max-width: 290px;
   margin-top: 0.45rem;
 }
 

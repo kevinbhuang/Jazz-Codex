@@ -91,29 +91,104 @@ const LESSONS = [
 
 const SHAPES = {
   maj7: [
-    { name: "Shell (6th-string root)", offsets: [0, null, 1, 1, null, null], rootString: 6 },
-    { name: "Shell (5th-string root)", offsets: [null, 0, 1, 1, null, null], rootString: 5 },
-    { name: "Drop-2 flavor", offsets: [0, null, 1, 0, 0, null], rootString: 6 },
+    {
+      name: "Shell (6th-string root)",
+      offsets: [0, null, 1, 1, null, null],
+      fingers: [1, null, 3, 4, null, null],
+      rootString: 6,
+    },
+    {
+      name: "Shell (5th-string root)",
+      offsets: [null, 0, 1, 1, null, null],
+      fingers: [null, 1, 3, 4, null, null],
+      rootString: 5,
+    },
+    {
+      name: "Drop-2 flavor",
+      offsets: [0, null, 1, 0, 0, null],
+      fingers: [1, null, 4, 2, 3, null],
+      rootString: 6,
+    },
   ],
   m7: [
-    { name: "Shell (6th-string root)", offsets: [0, null, 0, 0, null, null], rootString: 6 },
-    { name: "Shell (5th-string root)", offsets: [null, 0, 0, 0, null, null], rootString: 5 },
-    { name: "Drop-2 flavor", offsets: [0, null, 0, 0, 1, null], rootString: 6 },
+    {
+      name: "Shell (6th-string root)",
+      offsets: [0, null, 0, 0, null, null],
+      fingers: [1, null, 2, 3, null, null],
+      rootString: 6,
+    },
+    {
+      name: "Shell (5th-string root)",
+      offsets: [null, 0, 0, 0, null, null],
+      fingers: [null, 1, 2, 3, null, null],
+      rootString: 5,
+    },
+    {
+      name: "Drop-2 flavor",
+      offsets: [0, null, 0, 0, 1, null],
+      fingers: [1, null, 2, 3, 4, null],
+      rootString: 6,
+    },
   ],
   dom7: [
-    { name: "Shell (6th-string root)", offsets: [0, null, 0, 1, null, null], rootString: 6 },
-    { name: "Shell (5th-string root)", offsets: [null, 0, 0, 1, null, null], rootString: 5 },
-    { name: "Drop-2 flavor", offsets: [0, null, 0, 1, 0, null], rootString: 6 },
+    {
+      name: "Shell (6th-string root)",
+      offsets: [0, null, 0, 1, null, null],
+      fingers: [1, null, 2, 4, null, null],
+      rootString: 6,
+    },
+    {
+      name: "Shell (5th-string root)",
+      offsets: [null, 0, 0, 1, null, null],
+      fingers: [null, 1, 2, 4, null, null],
+      rootString: 5,
+    },
+    {
+      name: "Drop-2 flavor",
+      offsets: [0, null, 0, 1, 0, null],
+      fingers: [1, null, 2, 4, 3, null],
+      rootString: 6,
+    },
   ],
   m7b5: [
-    { name: "Half-diminished shell", offsets: [null, 0, 1, 0, null, null], rootString: 5 },
-    { name: "Compact shape", offsets: [0, null, 0, -1, -1, null], rootString: 6 },
-    { name: "Guide-tone shape", offsets: [null, 0, null, 0, 1, null], rootString: 5 },
+    {
+      name: "Half-diminished shell",
+      offsets: [null, 0, 1, 0, null, null],
+      fingers: [null, 1, 3, 2, null, null],
+      rootString: 5,
+    },
+    {
+      name: "Compact shape",
+      offsets: [0, null, 0, -1, -1, null],
+      fingers: [2, null, 4, 1, 1, null],
+      rootString: 6,
+    },
+    {
+      name: "Guide-tone shape",
+      offsets: [null, 0, null, 0, 1, null],
+      fingers: [null, 1, null, 2, 4, null],
+      rootString: 5,
+    },
   ],
   dim7: [
-    { name: "Symmetric grip A", offsets: [0, null, -1, 0, -1, null], rootString: 6 },
-    { name: "Symmetric grip B", offsets: [null, 0, -1, 0, -1, null], rootString: 5 },
-    { name: "Tight top-set", offsets: [null, null, 0, 1, 0, 1], rootString: 4 },
+    {
+      name: "Symmetric grip A",
+      offsets: [0, null, -1, 0, -1, null],
+      fingers: [2, null, 1, 3, 4, null],
+      rootString: 6,
+    },
+    {
+      name: "Symmetric grip B",
+      offsets: [null, 0, -1, 0, -1, null],
+      fingers: [null, 2, 1, 3, 4, null],
+      rootString: 5,
+    },
+    {
+      name: "Tight top-set",
+      offsets: [null, null, 0, 1, 0, 1],
+      fingers: [null, null, 1, 3, 2, 4],
+      rootString: 4,
+    },
   ],
 };
 
@@ -179,8 +254,19 @@ function findRootFret(root, rootString, zone) {
   return usable.sort((a, b) => Math.abs(a - center) - Math.abs(b - center))[0];
 }
 
+function guessFinger(fret, minFret) {
+  return String(Math.max(1, Math.min(4, fret - minFret + 1)));
+}
+
 function buildVoicing(root, quality, zone, shape) {
   const rootFret = findRootFret(root, shape.rootString, zone);
+  const rootIndex = noteToIndex(root);
+  const qualityInfo = CHORD_QUALITIES[quality];
+  const degreeByInterval = {};
+  qualityInfo.semitones.forEach((semi, idx) => {
+    degreeByInterval[((semi % 12) + 12) % 12] = qualityInfo.formula[idx];
+  });
+
   const frets = shape.offsets.map((offset) => {
     if (offset === null) return "x";
     const target = rootFret + offset;
@@ -188,22 +274,48 @@ function buildVoicing(root, quality, zone, shape) {
     return target;
   });
 
+  const playedFrets = frets.filter((fret) => Number.isInteger(fret) && fret > 0);
+  const minPlayedFret = playedFrets.length ? Math.min(...playedFrets) : 1;
+
+  const resolvedFingers = frets.map((fret, stringIdx) => {
+    if (fret === "x") return "x";
+    if (fret === 0) return "o";
+    const preset = shape.fingers ? shape.fingers[stringIdx] : null;
+    if (preset) return String(preset);
+    return guessFinger(fret, minPlayedFret);
+  });
+
+  const tones = frets.map((fret, stringIdx) => {
+    if (!Number.isInteger(fret)) return null;
+    const stringNumber = 6 - stringIdx;
+    const noteIndex = (openNoteByString[stringNumber] + fret) % 12;
+    const interval = (noteIndex - rootIndex + 12) % 12;
+    return {
+      degree: degreeByInterval[interval] || "?",
+      isRoot: interval === 0,
+    };
+  });
+
   return {
     name: shape.name,
     frets,
+    tones,
+    resolvedFingers,
   };
 }
 
-function renderDiagram({ frets }) {
-  const width = 220;
-  const height = 240;
+function renderDiagram(voicing) {
+  const { frets, tones, resolvedFingers } = voicing;
+  const width = 290;
+  const height = 250;
   const left = 28;
   const top = 30;
   const stringGap = 32;
   const fretGap = 36;
+  const rightColX = left + stringGap * 5 + 38;
 
-  const numericFrets = frets.filter((f) => Number.isInteger(f));
-  const positiveFrets = numericFrets.filter((f) => f > 0);
+  const numericFrets = frets.filter((fret) => Number.isInteger(fret));
+  const positiveFrets = numericFrets.filter((fret) => fret > 0);
   const minFret = positiveFrets.length ? Math.min(...positiveFrets) : 1;
   const baseFret = minFret > 1 ? minFret : 1;
 
@@ -223,23 +335,40 @@ function renderDiagram({ frets }) {
   }
 
   let markers = "";
+  let fingerLabels = `<text x="${rightColX - 12}" y="${top - 10}" font-size="11" font-family="IBM Plex Mono">LH</text>`;
+
   for (let stringIdx = 0; stringIdx < 6; stringIdx += 1) {
     const x = left + stringIdx * stringGap;
-    const val = frets[stringIdx];
+    const fret = frets[stringIdx];
 
-    if (val === "x") {
+    if (fret === "x") {
       markers += `<text x="${x - 4}" y="${top - 10}" font-size="16">x</text>`;
-    } else if (val === 0) {
+      continue;
+    }
+
+    if (fret === 0) {
       markers += `<text x="${x - 4}" y="${top - 10}" font-size="16">o</text>`;
-    } else {
-      const y = top + (val - baseFret + 0.5) * fretGap;
-      markers += `<circle cx="${x}" cy="${y}" r="10" fill="currentColor"/>`;
+      continue;
+    }
+
+    const y = top + (fret - baseFret + 0.5) * fretGap;
+    const tone = tones[stringIdx];
+    const degreeLabel = tone ? tone.degree : "";
+    const fill = tone && tone.isRoot ? "#d62828" : "#111111";
+    const degreeFontSize = degreeLabel.length > 1 ? 8 : 10;
+
+    markers += `<circle cx="${x}" cy="${y}" r="11" fill="${fill}" stroke="white" stroke-width="1.5"/>`;
+    markers += `<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="${degreeFontSize}" fill="white" font-family="IBM Plex Mono">${degreeLabel}</text>`;
+
+    const finger = resolvedFingers[stringIdx];
+    if (finger !== "x" && finger !== "o") {
+      fingerLabels += `<text x="${rightColX}" y="${y + 4}" font-size="13" font-weight="700">${finger}</text>`;
     }
   }
 
   const fretLabel = baseFret > 1 ? `<text x="4" y="${top + 18}" font-size="12">${baseFret}fr</text>` : "";
 
-  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram">${lines}${markers}${fretLabel}</svg>`;
+  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with fingering">${lines}${markers}${fingerLabels}${fretLabel}</svg>`;
 }
 
 function updateChordBuilder() {
@@ -263,7 +392,8 @@ function updateVoicings() {
     .map((voicing) => {
       return `<article class="voicing-card">
         <strong>${root}${symbol}</strong> - ${voicing.name}<br/>
-        <small>Strings 6->1: ${voicing.frets.join(" ")}</small>
+        <small>Strings 6->1: ${voicing.frets.join(" ")}</small><br/>
+        <small class="finger-line">Fingers 6->1: ${voicing.resolvedFingers.join(" ")}</small>
         ${renderDiagram(voicing)}
       </article>`;
     })
