@@ -196,6 +196,16 @@ body {
 .stage-actions {
   display: flex;
   gap: 0.55rem;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.note-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.86rem;
+  color: var(--muted);
 }
 
 button,
@@ -367,6 +377,28 @@ button {
   padding: 0.65rem;
   background: color-mix(in oklab, var(--accent-3), white 45%);
   margin: 0.8rem 0;
+}
+
+.advanced-options {
+  border: 1px dashed var(--line);
+  border-radius: 10px;
+  padding: 0.45rem 0.55rem;
+  margin-top: 0.5rem;
+}
+
+.advanced-options summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.advanced-options[open] {
+  background: color-mix(in oklab, var(--panel), white 20%);
+}
+
+.advanced-options label {
+  display: grid;
+  gap: 0.25rem;
+  margin-top: 0.45rem;
 }
 
 .tempo-input {
@@ -648,4 +680,34 @@ button {
 
 .play-tutorial-chord-btn:hover {
   border-color: var(--accent-2);
+}
+
+@media (max-width: 980px) {
+  button,
+  select,
+  .transpose-choice,
+  .root-choice,
+  .extension-choice {
+    min-height: 44px;
+    font-size: 0.98rem;
+  }
+
+  .player-controls {
+    position: sticky;
+    bottom: 0.45rem;
+    z-index: 12;
+    padding: 0.45rem;
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    background: color-mix(in oklab, var(--panel), white 15%);
+  }
+
+  .tempo-input {
+    width: 100%;
+    max-width: 220px;
+  }
+
+  .bar-grid {
+    grid-template-columns: 1fr;
+  }
 }

@@ -75,6 +75,7 @@ const scaleModuleState = {
   scaleId: "ionian",
   applyModuleId: "major_iivi",
   applyKey: "C",
+  includeEnclosures: false,
 };
 
 const playAlongState = {
@@ -83,6 +84,25 @@ const playAlongState = {
   tempo: 90,
   includeDrums: true,
   includeMetronome: false,
+  includeWalkingBass: true,
+  swing: 60,
+  drumStyle: "sticks",
+  rideVariation: "classic",
+};
+
+const earTrainingState = {
+  mode: "quality",
+  score: 0,
+  attempts: 0,
+  currentChord: null,
+  correctAnswer: null,
+  feedback: "Press New Question to begin.",
+};
+
+const progressionUiState = {};
+
+const uiState = {
+  showNoteNames: false,
 };
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
@@ -365,6 +385,7 @@ const stageModuleLabel = document.getElementById("stageModuleLabel");
 const stageTitle = document.getElementById("stageTitle");
 const prevModuleBtn = document.getElementById("prevModuleBtn");
 const nextModuleBtn = document.getElementById("nextModuleBtn");
+const showNoteNamesToggle = document.getElementById("showNoteNamesToggle");
 const lessonContent = document.getElementById("lessonContent");
 const easterEggGuitarBtn = document.getElementById("easterEggGuitarBtn");
 
@@ -536,11 +557,152 @@ function scalePointsForZone(root, scaleId, zone) {
         fret,
         midi: openMidiByString[stringNumber] + fret,
         degree,
+        noteName: noteFromIndex(noteIndex, root.includes("b")),
         isRoot: interval === 0,
       });
     }
   }
   return points;
+}
+
+function getTemplateForRootString(quality, rootString) {
+  const templates = VOICING_TEMPLATES[quality] || [];
+  return templates.find((template) => template.rootString === rootString) || null;
+}
+
+function buildVoicingWithTemplate(chordSymbol, zone, template, options = {}) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed || !template) return null;
+  const rootIndex = noteToIndex(parsed.root);
+  if (rootIndex < 0) return null;
+  const placement = rootPlacement(parsed.root, template.rootString, zone);
+  const anchorFret = placement.fret;
+
+  const fretsBase = template.intervals.map((interval, idx) => {
+    if (interval === null) return "x";
+    const stringNumber = 6 - idx;
+    const targetNoteIndex = (rootIndex + interval + 12) % 12;
+    const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
+    const fret = chooseClosestFret(candidates, anchorFret);
+    if (fret === null || fret < 0 || fret > 16) return "x";
+    return fret;
+  });
+
+  const withBuilderOptions = applyBuilderOptionsToFrets(fretsBase, template, rootIndex, anchorFret, options);
+  const frets = applySlashBassIfNeeded(parsed, withBuilderOptions, anchorFret);
+  const resolvedFingers = resolveFingerings(frets);
+
+  const tones = frets.map((fret, idx) => {
+    if (!Number.isInteger(fret)) return null;
+    const stringNumber = 6 - idx;
+    const noteIndex = (openNoteByString[stringNumber] + fret) % 12;
+    const interval = (noteIndex - rootIndex + 12) % 12;
+    return {
+      degree: INTERVAL_LABELS[interval],
+      noteName: noteFromIndex(noteIndex, parsed.root.includes("b")),
+      isRoot: interval === 0,
+    };
+  });
+
+  return {
+    chord: chordSymbol,
+    name: template.name,
+    frets,
+    tones,
+    resolvedFingers,
+  };
+}
+
+function movementCost(prevVoicing, nextVoicing) {
+  if (!prevVoicing || !nextVoicing) return Number.POSITIVE_INFINITY;
+  let cost = 0;
+  for (let i = 0; i < 6; i += 1) {
+    const prevFret = prevVoicing.frets[i];
+    const nextFret = nextVoicing.frets[i];
+    if (!Number.isInteger(prevFret) || !Number.isInteger(nextFret)) continue;
+    cost += Math.abs(nextFret - prevFret);
+  }
+  return cost;
+}
+
+function buildSmoothVoicingSequence(bars, zone) {
+  const sequence = [];
+  bars.forEach((chord, idx) => {
+    const parsed = parseChordSymbol(chord);
+    if (!parsed) return;
+    const options = [];
+    [6, 5].forEach((rootString) => {
+      const template = getTemplateForRootString(parsed.quality, rootString);
+      if (!template) return;
+      const candidate = buildVoicingWithTemplate(chord, zone, template);
+      if (candidate) options.push(candidate);
+    });
+    const fallback = buildVoicing(chord, zone);
+    if (fallback) options.push(fallback);
+    if (!options.length) return;
+
+    if (idx === 0 || !sequence.length) {
+      sequence.push(options[0]);
+      return;
+    }
+
+    const prev = sequence[sequence.length - 1];
+    options.sort((a, b) => movementCost(prev, a) - movementCost(prev, b));
+    sequence.push(options[0]);
+  });
+  return sequence;
+}
+
+function movedToneMask(prevVoicing, nextVoicing) {
+  if (!prevVoicing || !nextVoicing) return [true, true, true, true, true, true];
+  return nextVoicing.frets.map((fret, idx) => {
+    if (!Number.isInteger(fret)) return false;
+    return prevVoicing.frets[idx] !== fret;
+  });
+}
+
+function nextToneOptions(mode, chord) {
+  if (mode === "guide") {
+    return ["3 + 7", "b3 + b7", "3 + b7"];
+  }
+  const parsed = parseChordSymbol(chord);
+  const quality = parsed ? parsed.quality : "maj7";
+  const labels = {
+    maj7: "Major 7",
+    m7: "Minor 7",
+    dom7: "Dominant 7",
+    m7b5: "Minor 7b5",
+  };
+  return ["Major 7", "Minor 7", "Dominant 7", "Minor 7b5"].filter((item) => item !== labels[quality]).slice(0, 3).concat(labels[quality]);
+}
+
+function generateEarQuestion(mode) {
+  const roots = ROOT_NOTE_OPTIONS;
+  const qualityPool = mode === "guide" ? ["maj7", "m7", "dom7"] : ["maj7", "m7", "dom7", "m7b5"];
+  const quality = qualityPool[Math.floor(Math.random() * qualityPool.length)];
+  const root = roots[Math.floor(Math.random() * roots.length)];
+  const chord = chordSymbolFromRootQuality(root, quality);
+  const correctAnswer =
+    mode === "guide"
+      ? quality === "maj7"
+        ? "3 + 7"
+        : quality === "m7"
+          ? "b3 + b7"
+          : "3 + b7"
+      : quality === "maj7"
+        ? "Major 7"
+        : quality === "m7"
+          ? "Minor 7"
+          : quality === "dom7"
+            ? "Dominant 7"
+            : "Minor 7b5";
+
+  const options = [...new Set(nextToneOptions(mode, chord))].slice(0, 4);
+  if (!options.includes(correctAnswer)) {
+    options[options.length - 1] = correctAnswer;
+  }
+
+  return { chord, correctAnswer, options: options.sort(() => Math.random() - 0.5) };
 }
 
 function scaleRunFrequencies(root, scaleId, zone) {
@@ -567,6 +729,29 @@ function scaleRunFrequencies(root, scaleId, zone) {
   const ascendingMidi = [...scale.intervals, 12].map((interval) => rootMidi + interval);
   const descendingMidi = ascendingMidi.slice(0, ascendingMidi.length - 1).reverse();
   return [...ascendingMidi, ...descendingMidi].map((midi) => 440 * Math.pow(2, (midi - 69) / 12));
+}
+
+function scaleChordToneFrequencies(root, scaleId, zone) {
+  const rootIndex = noteToIndex(root);
+  if (rootIndex < 0) return [];
+  const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
+  const rootPoints = scalePointsForZone(root, scaleId, zone).filter((point) => point.isRoot);
+  const targetMidi = zone === "mid" ? 60 : 48;
+  const rootMidi = rootPoints.length
+    ? rootPoints.slice().sort((a, b) => Math.abs(a.midi - targetMidi) - Math.abs(b.midi - targetMidi))[0].midi
+    : targetMidi;
+  const chordToneIntervals = [scale.intervals[0], scale.intervals[2], scale.intervals[4], scale.intervals[6]];
+  return chordToneIntervals.map((interval) => 440 * Math.pow(2, (rootMidi + interval - 69) / 12));
+}
+
+function enclosedToneRun(frequencies) {
+  const out = [];
+  frequencies.forEach((f) => {
+    const up = f * Math.pow(2, 1 / 12);
+    const down = f * Math.pow(2, -1 / 12);
+    out.push(up, down, f);
+  });
+  return out;
 }
 
 function scaleIdLabel(scaleId) {
@@ -775,6 +960,7 @@ function buildVoicing(chordSymbol, zone, options = {}) {
     const interval = (noteIndex - rootIndex + 12) % 12;
     return {
       degree: INTERVAL_LABELS[interval],
+      noteName: noteFromIndex(noteIndex, root.includes("b")),
       isRoot: interval === 0,
     };
   });
@@ -794,7 +980,7 @@ function chordSymbolFromRootQuality(root, quality) {
   return `${normalizedRoot}${info.symbol}`;
 }
 
-function renderDiagram(voicing) {
+function renderDiagram(voicing, options = {}) {
   const { frets, tones, resolvedFingers } = voicing;
   const width = 318;
   const height = 224;
@@ -854,12 +1040,19 @@ function renderDiagram(voicing) {
     }
 
     if (Number.isInteger(fret) && fret > 0) {
+      const mask = Array.isArray(options.movedMask) ? options.movedMask : null;
+      if (options.onlyMoved && mask && !mask[arrayIdx]) {
+        continue;
+      }
       const x = left + (fret - baseFret + 0.5) * fretGap;
       const fill = markerFill(tone ? tone.degree : "", tone && tone.isRoot);
       const degree = tone ? tone.degree : "1";
       const degreeFont = degree.length > 1 ? 7 : 9;
       layers += `<circle cx="${x}" cy="${y}" r="9.5" fill="${fill}" stroke="white" stroke-width="1.4"/>`;
       layers += `<text x="${x}" y="${y + 3}" text-anchor="middle" fill="white" font-family="IBM Plex Mono" font-size="${degreeFont}">${degree}</text>`;
+      if (options.showNoteNames && tone && tone.noteName) {
+        layers += `<text x="${x}" y="${y + 17}" text-anchor="middle" fill="#152534" font-family="IBM Plex Mono" font-size="8">${tone.noteName}</text>`;
+      }
     }
 
     if (finger !== "x" && finger !== "o") {
@@ -875,7 +1068,7 @@ function renderDiagram(voicing) {
   return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with left mute/open marks, bottom frets, low E on bottom, and right-hand fingering numbers">${layers}</svg>`;
 }
 
-function renderScaleDiagram(root, scaleId, zone) {
+function renderScaleDiagram(root, scaleId, zone, options = {}) {
   const points = scalePointsForZone(root, scaleId, zone);
   const [baseFret, maxFret] = ZONES[zone];
   const fretCount = maxFret - baseFret + 1;
@@ -916,6 +1109,9 @@ function renderScaleDiagram(root, scaleId, zone) {
     const font = point.degree.length > 1 ? 7 : 9;
     layers += `<circle cx="${x}" cy="${y}" r="9.3" fill="${fill}" stroke="white" stroke-width="1.2"/>`;
     layers += `<text x="${x}" y="${y + 3}" text-anchor="middle" fill="white" font-family="IBM Plex Mono" font-size="${font}">${point.degree}</text>`;
+    if (options.showNoteNames && point.noteName) {
+      layers += `<text x="${x}" y="${y + 16}" text-anchor="middle" fill="#152534" font-family="IBM Plex Mono" font-size="8">${point.noteName}</text>`;
+    }
   });
 
   for (let i = 0; i < fretCount; i += 1) {
@@ -1101,9 +1297,17 @@ async function playTutorialVoicing(root, quality, rootString, zone, includeFifth
 
 async function playScalePreview(root, scaleId, zone) {
   const ctx = await getAudioContext();
+  const chordTones = scaleChordToneFrequencies(root, scaleId, zone);
   const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
-  if (!runFrequencies.length) return;
-  playScaleRun(ctx, runFrequencies, ctx.currentTime, {
+  if (!runFrequencies.length || !chordTones.length) return;
+  const leadIn = scaleModuleState.includeEnclosures ? enclosedToneRun(chordTones) : chordTones;
+  playScaleRun(ctx, leadIn, ctx.currentTime, {
+    stepSeconds: scaleModuleState.includeEnclosures ? 0.16 : 0.24,
+    peakGain: 0.095,
+    releaseSeconds: 0.22,
+  });
+  const offset = leadIn.length * (scaleModuleState.includeEnclosures ? 0.16 : 0.24) + 0.14;
+  playScaleRun(ctx, runFrequencies, ctx.currentTime + offset, {
     stepSeconds: 0.42,
     peakGain: 0.1,
     releaseSeconds: 0.42,
@@ -1221,11 +1425,29 @@ function scheduleJazzDrums(time, beatInBar) {
   if (beatInBar === 2 || beatInBar === 4) {
     scheduleSnare(time, true);
   }
-  scheduleHiHat(time, { peakGain: beatInBar === 2 || beatInBar === 4 ? 0.08 : 0.065, release: 0.05 });
+  const brush = playAlongState.drumStyle === "brushes";
+  const rideBusy = playAlongState.rideVariation === "busy";
+  const rideSkip = playAlongState.rideVariation === "skip";
+  scheduleHiHat(time, {
+    peakGain: brush ? 0.055 : beatInBar === 2 || beatInBar === 4 ? 0.08 : 0.065,
+    release: brush ? 0.085 : 0.05,
+  });
 
-  // Swung offbeat hat ("and" of each beat) for a jazz ride/hat feel.
+  // Swung offbeat hat/ride.
   const beatSeconds = 60 / backingTrackState.tempo;
-  scheduleHiHat(time + beatSeconds * 0.62, { peakGain: 0.055, release: 0.04 });
+  const swingRatio = Math.max(0.5, Math.min(0.68, playAlongState.swing / 100));
+  if (!rideSkip || beatInBar === 2 || beatInBar === 4) {
+    scheduleHiHat(time + beatSeconds * swingRatio, {
+      peakGain: brush ? 0.04 : 0.055,
+      release: brush ? 0.07 : 0.04,
+    });
+  }
+  if (rideBusy) {
+    scheduleHiHat(time + beatSeconds * 0.34, {
+      peakGain: brush ? 0.032 : 0.045,
+      release: brush ? 0.06 : 0.035,
+    });
+  }
 }
 
 function scheduleClick(time, beatInBar) {
@@ -1268,6 +1490,49 @@ function scheduleBass(time, chordSymbol, beatInBar) {
   gain.connect(ctx.destination);
   osc.start(time);
   osc.stop(time + 0.4);
+}
+
+function bassMidiForDegree(root, degreeOffset, octave = 2) {
+  const rootIndex = noteToIndex(root);
+  if (rootIndex < 0) return null;
+  const noteIndex = (rootIndex + degreeOffset + 12) % 12;
+  return (octave + 1) * 12 + noteIndex;
+}
+
+function scheduleWalkingBass(time, chordSymbol, beatInBar, nextChordSymbol) {
+  const ctx = backingTrackState.audioCtx;
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!ctx || !parsed) return;
+
+  const nextRoot = parseChordRoot(nextChordSymbol || chordSymbol) || parsed.root;
+  const rootMidi = bassMidiForDegree(parsed.root, 0, 2);
+  const thirdOffset = parsed.quality === "m7" || parsed.quality === "m7b5" || parsed.quality === "dim7" ? 3 : 4;
+  const fifthOffset = parsed.quality === "m7b5" || parsed.quality === "dim7" ? 6 : 7;
+  const nextRootMidi = bassMidiForDegree(nextRoot, 0, 2);
+  if (!rootMidi || !nextRootMidi) return;
+
+  let midi = rootMidi;
+  if (beatInBar === 2) midi = bassMidiForDegree(parsed.root, fifthOffset, 2) || rootMidi;
+  if (beatInBar === 3) midi = bassMidiForDegree(parsed.root, thirdOffset, 2) || rootMidi;
+  if (beatInBar === 4) midi = nextRootMidi - 1;
+
+  const frequency = 440 * Math.pow(2, (midi - 69) / 12);
+  const osc = ctx.createOscillator();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(frequency, time);
+  osc.detune.setValueAtTime((Math.random() - 0.5) * 5, time);
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(320, time);
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(0.17, time + 0.01);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.28);
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.3);
 }
 
 function scheduleCompingChord(time, chordSymbol, beatInBar) {
@@ -1318,6 +1583,7 @@ function scheduleBeat() {
   const barIndex = Math.floor(backingTrackState.step / 4) % backingTrackState.bars.length;
   const beatInBar = (backingTrackState.step % 4) + 1;
   const chord = backingTrackState.bars[barIndex];
+  const nextChord = backingTrackState.bars[(barIndex + 1) % backingTrackState.bars.length];
   const time = backingTrackState.nextNoteTime;
 
   if (backingTrackState.mode === "playalong") {
@@ -1327,6 +1593,9 @@ function scheduleBeat() {
     }
     if (playAlongState.includeMetronome) {
       scheduleClick(time, beatInBar);
+    }
+    if (playAlongState.includeWalkingBass) {
+      scheduleWalkingBass(time, chord, beatInBar, nextChord);
     }
   } else {
     scheduleCompingChord(time, chord, beatInBar);
@@ -1471,7 +1740,7 @@ function renderTutorialShellCard(root, quality, rootString, zone) {
           aria-label="Play ${chordSymbol}"
         >🔈</button>
       </div>
-      ${renderDiagram(voicing)}
+      ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
       <p class="tutorial-card-copy">${summary.label} shell (${summary.formula})</p>
     </article>
   `;
@@ -1508,7 +1777,7 @@ function renderTutorialBuilderCard(root, quality, rootString, zone, includeFifth
           aria-label="Play ${labelSymbol}"
         >🔈</button>
       </div>
-      ${renderDiagram(voicing)}
+      ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
       <p class="tutorial-card-copy">${summary.label} | Root on string ${rootString} | Formula: ${formula}</p>
     </article>
   `;
@@ -1555,6 +1824,10 @@ function renderTutorialModule() {
       )
     )
     .join("");
+  const earChoiceButtons = (earTrainingState.currentChord ? earTrainingState.currentChord.options : []).map(
+    (option) =>
+      `<button type="button" class="extension-choice" data-ear-choice="${option}">${option}</button>`
+  );
 
   return `
     <section class="lesson-block">
@@ -1592,6 +1865,28 @@ function renderTutorialModule() {
           <div class="diagram-grid tutorial-grid builder-fixed-grid">${builderBottomRow || "<p>Unable to build bottom row voicings.</p>"}</div>
         </div>
       </div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>Ear Training</h3>
+      <div class="builder-controls">
+        <div class="builder-extension-wrap">
+          <span>Mode</span>
+          <div class="builder-extension-group" role="radiogroup" aria-label="Ear training mode">
+            <button type="button" class="extension-choice ${earTrainingState.mode === "quality" ? "active" : ""}" data-ear-mode="quality">Chord quality</button>
+            <button type="button" class="extension-choice ${earTrainingState.mode === "guide" ? "active" : ""}" data-ear-mode="guide">Guide tones (3rd/7th)</button>
+          </div>
+        </div>
+      </div>
+      <div class="player-controls">
+        <button type="button" class="start-track-btn" id="earNewQuestionBtn">New Question</button>
+        <button type="button" id="earPlayQuestionBtn" ${earTrainingState.currentChord ? "" : "disabled"}>Play Question</button>
+      </div>
+      <div class="builder-extension-group" style="margin-top:0.5rem;">
+        ${earChoiceButtons.join("") || "<span class='tutorial-card-copy'>No question loaded yet.</span>"}
+      </div>
+      <p class="tutorial-card-copy">${earTrainingState.feedback}</p>
+      <p class="tutorial-card-copy">Score: ${earTrainingState.score}/${earTrainingState.attempts}</p>
     </section>
 
     <section class="examples-divider" aria-label="Examples section">
@@ -1655,6 +1950,45 @@ function wireTutorialModule() {
       await playTutorialVoicing(root, quality, rootString, zone, includeFifth, extension);
     });
   });
+
+  lessonContent.querySelectorAll("[data-ear-mode]").forEach((button) => {
+    button.addEventListener("click", () => {
+      earTrainingState.mode = button.dataset.earMode === "guide" ? "guide" : "quality";
+      earTrainingState.feedback = "Mode changed. Press New Question.";
+      renderLesson();
+    });
+  });
+
+  const newQuestionBtn = document.getElementById("earNewQuestionBtn");
+  const playQuestionBtn = document.getElementById("earPlayQuestionBtn");
+  if (newQuestionBtn) {
+    newQuestionBtn.addEventListener("click", () => {
+      earTrainingState.currentChord = generateEarQuestion(earTrainingState.mode);
+      earTrainingState.correctAnswer = earTrainingState.currentChord.correctAnswer;
+      earTrainingState.feedback = "Listen, then pick the correct answer.";
+      renderLesson();
+    });
+  }
+  if (playQuestionBtn) {
+    playQuestionBtn.addEventListener("click", async () => {
+      if (!earTrainingState.currentChord) return;
+      await playChordPreview(earTrainingState.currentChord.chord, "shell_chords_foundation");
+    });
+  }
+  lessonContent.querySelectorAll("[data-ear-choice]").forEach((button) => {
+    button.addEventListener("click", () => {
+      if (!earTrainingState.currentChord) return;
+      earTrainingState.attempts += 1;
+      const choice = button.dataset.earChoice || "";
+      if (choice === earTrainingState.correctAnswer) {
+        earTrainingState.score += 1;
+        earTrainingState.feedback = `Correct: ${earTrainingState.correctAnswer}`;
+      } else {
+        earTrainingState.feedback = `Not quite. Correct answer: ${earTrainingState.correctAnswer}`;
+      }
+      renderLesson();
+    });
+  });
 }
 
 function renderScaleModule() {
@@ -1680,7 +2014,7 @@ function renderScaleModule() {
         <article class="chord-card">
           <h4>Bar ${idx + 1}: ${chord}</h4>
           <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
-          ${renderScaleDiagram(root, scaleId, "low")}
+          ${renderScaleDiagram(root, scaleId, "low", { showNoteNames: uiState.showNoteNames })}
         </article>
       `;
     })
@@ -1712,19 +2046,23 @@ function renderScaleModule() {
         </div>
       </div>
       <p><strong>Formula:</strong> ${scale.formula} <span class="chip">${scale.targetLabel}</span></p>
+      <label>
+        <input id="scaleEnclosureToggle" type="checkbox" ${scaleModuleState.includeEnclosures ? "checked" : ""} />
+        Add enclosures / approach notes before chord tones
+      </label>
       <div class="player-controls">
-        <button type="button" class="start-track-btn" id="playScaleLowBtn">Play Scale (Low Zone)</button>
-        <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Scale (Mid Zone)</button>
+        <button type="button" class="start-track-btn" id="playScaleLowBtn">Play Jazz Scale (Low Zone)</button>
+        <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Jazz Scale (Mid Zone)</button>
       </div>
       <h4>Scale Fingerboards</h4>
       <div class="diagram-grid">
         <article class="chord-card">
           <h4>Low Zone</h4>
-          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "low")}
+          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "low", { showNoteNames: uiState.showNoteNames })}
         </article>
         <article class="chord-card">
           <h4>Mid Zone</h4>
-          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "mid")}
+          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "mid", { showNoteNames: uiState.showNoteNames })}
         </article>
       </div>
     </section>
@@ -1755,7 +2093,7 @@ function renderScaleModule() {
 
     <section class="lesson-block">
       <h3>Play-Along Loop</h3>
-      <p>Guitar comping loop with optional jazz drums and metronome.</p>
+      <p>Guitar comping loop with optional jazz drums, swing feel, and walking bass.</p>
       <div class="practice-player">
         <label>
           Progression
@@ -1778,14 +2116,40 @@ function renderScaleModule() {
           Tempo (BPM)
           <input id="playAlongTempoInput" class="tempo-input" type="number" min="50" max="220" value="${playAlongState.tempo}" />
         </label>
-        <label>
-          <input id="playAlongDrumsToggle" type="checkbox" ${playAlongState.includeDrums ? "checked" : ""} />
-          Include jazz drum groove
-        </label>
-        <label>
-          <input id="playAlongMetronomeToggle" type="checkbox" ${playAlongState.includeMetronome ? "checked" : ""} />
-          Include metronome click
-        </label>
+        <details class="advanced-options">
+          <summary>More options</summary>
+          <label>
+            <input id="playAlongDrumsToggle" type="checkbox" ${playAlongState.includeDrums ? "checked" : ""} />
+            Include jazz drum groove
+          </label>
+          <label>
+            <input id="playAlongMetronomeToggle" type="checkbox" ${playAlongState.includeMetronome ? "checked" : ""} />
+            Include metronome click
+          </label>
+          <label>
+            <input id="playAlongWalkingBassToggle" type="checkbox" ${playAlongState.includeWalkingBass ? "checked" : ""} />
+            Include walking bass
+          </label>
+          <label>
+            Swing feel (${playAlongState.swing}%)
+            <input id="playAlongSwingInput" type="range" min="50" max="68" step="1" value="${playAlongState.swing}" />
+          </label>
+          <label>
+            Drum style
+            <select id="playAlongDrumStyleSelect" class="tempo-input">
+              <option value="sticks" ${playAlongState.drumStyle === "sticks" ? "selected" : ""}>Sticks</option>
+              <option value="brushes" ${playAlongState.drumStyle === "brushes" ? "selected" : ""}>Brushes</option>
+            </select>
+          </label>
+          <label>
+            Ride pattern
+            <select id="playAlongRideVariationSelect" class="tempo-input">
+              <option value="classic" ${playAlongState.rideVariation === "classic" ? "selected" : ""}>Classic</option>
+              <option value="skip" ${playAlongState.rideVariation === "skip" ? "selected" : ""}>Skip accents</option>
+              <option value="busy" ${playAlongState.rideVariation === "busy" ? "selected" : ""}>Busy</option>
+            </select>
+          </label>
+        </details>
         <div class="player-controls">
           <button id="startPlayAlongBtn" class="start-track-btn" type="button">Start Play-Along Loop</button>
           <button id="stopPlayAlongBtn" class="stop-track-btn" type="button" disabled>Stop</button>
@@ -1811,7 +2175,7 @@ function renderScaleModule() {
             <article class="chord-card">
               <h4>Bar ${idx + 1}: ${chord}</h4>
               <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
-              ${renderScaleDiagram(root, scaleId, "low")}
+              ${renderScaleDiagram(root, scaleId, "low", { showNoteNames: uiState.showNoteNames })}
             </article>
           `;
         })
@@ -1851,6 +2215,7 @@ function wireScaleModule() {
 
   const playLowBtn = document.getElementById("playScaleLowBtn");
   const playMidBtn = document.getElementById("playScaleMidBtn");
+  const enclosureToggle = document.getElementById("scaleEnclosureToggle");
 
   if (playLowBtn) {
     playLowBtn.addEventListener("click", async () => {
@@ -1862,6 +2227,11 @@ function wireScaleModule() {
       await playScalePreview(scaleModuleState.root, scaleModuleState.scaleId, "mid");
     });
   }
+  if (enclosureToggle) {
+    enclosureToggle.addEventListener("change", () => {
+      scaleModuleState.includeEnclosures = enclosureToggle.checked;
+    });
+  }
 
   wirePlayAlongModule();
 }
@@ -1871,6 +2241,10 @@ function wirePlayAlongModule() {
   const tempoInput = document.getElementById("playAlongTempoInput");
   const drumsToggle = document.getElementById("playAlongDrumsToggle");
   const metronomeToggle = document.getElementById("playAlongMetronomeToggle");
+  const walkingBassToggle = document.getElementById("playAlongWalkingBassToggle");
+  const swingInput = document.getElementById("playAlongSwingInput");
+  const drumStyleSelect = document.getElementById("playAlongDrumStyleSelect");
+  const rideVariationSelect = document.getElementById("playAlongRideVariationSelect");
   const startBtn = document.getElementById("startPlayAlongBtn");
   const stopBtn = document.getElementById("stopPlayAlongBtn");
   const statusEl = document.getElementById("playAlongStatus");
@@ -1912,6 +2286,28 @@ function wirePlayAlongModule() {
           ? "Metronome click enabled"
           : "Metronome click disabled";
       }
+    });
+  }
+
+  if (walkingBassToggle) {
+    walkingBassToggle.addEventListener("change", () => {
+      playAlongState.includeWalkingBass = walkingBassToggle.checked;
+    });
+  }
+  if (swingInput) {
+    swingInput.addEventListener("input", () => {
+      playAlongState.swing = Math.max(50, Math.min(68, Number(swingInput.value) || 60));
+    });
+  }
+  if (drumStyleSelect) {
+    drumStyleSelect.addEventListener("change", () => {
+      playAlongState.drumStyle = drumStyleSelect.value === "brushes" ? "brushes" : "sticks";
+    });
+  }
+  if (rideVariationSelect) {
+    rideVariationSelect.addEventListener("change", () => {
+      const value = rideVariationSelect.value;
+      playAlongState.rideVariation = ["classic", "skip", "busy"].includes(value) ? value : "classic";
     });
   }
 
@@ -1970,7 +2366,7 @@ function renderProgressionModule(module) {
             <h4>${chord}</h4>
             <button type="button" class="play-chord-btn" data-chord="${chord}" data-module="${module.id}" aria-label="Play ${chord}">🔈</button>
           </div>
-          ${renderDiagram(voicing)}
+          ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
         </article>
       `;
     })
@@ -2187,6 +2583,14 @@ function triggerEmojiRain() {
 
 function bootstrapApp() {
   try {
+    if (showNoteNamesToggle) {
+      showNoteNamesToggle.checked = uiState.showNoteNames;
+      showNoteNamesToggle.addEventListener("change", () => {
+        uiState.showNoteNames = showNoteNamesToggle.checked;
+        renderLesson();
+      });
+    }
+
     renderModuleNav();
     setActiveModule(activeModuleId);
 
