@@ -54,6 +54,12 @@ const MODULES = [
     title: "I to IV",
     blurb: "Cmaj7 Gm7 C7 Fmaj7",
   },
+  {
+    id: "top_jazz_scales",
+    kind: "scales",
+    title: "Top 5 Jazz Scales",
+    blurb: "Map scales directly to chord qualities in real progressions.",
+  },
 ];
 
 const ROOT_NOTE_OPTIONS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -64,7 +70,51 @@ const tutorialBuilderState = {
   extension: "none",
 };
 
+const scaleModuleState = {
+  root: "C",
+  scaleId: "ionian",
+  applyModuleId: "major_iivi",
+};
+
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
+
+const SCALE_LIBRARY = {
+  ionian: {
+    name: "Major (Ionian)",
+    formula: "1 2 3 4 5 6 7",
+    intervals: [0, 2, 4, 5, 7, 9, 11],
+    targetQuality: "maj7",
+    targetLabel: "Fits major 7 chords (maj7)",
+  },
+  dorian: {
+    name: "Dorian",
+    formula: "1 2 b3 4 5 6 b7",
+    intervals: [0, 2, 3, 5, 7, 9, 10],
+    targetQuality: "m7",
+    targetLabel: "Fits minor 7 chords (m7)",
+  },
+  mixolydian: {
+    name: "Mixolydian",
+    formula: "1 2 3 4 5 6 b7",
+    intervals: [0, 2, 4, 5, 7, 9, 10],
+    targetQuality: "dom7",
+    targetLabel: "Fits dominant 7 chords (7)",
+  },
+  locrian: {
+    name: "Locrian",
+    formula: "1 b2 b3 4 b5 b6 b7",
+    intervals: [0, 1, 3, 5, 6, 8, 10],
+    targetQuality: "m7b5",
+    targetLabel: "Fits half-diminished chords (m7b5)",
+  },
+  melodic_minor: {
+    name: "Melodic Minor",
+    formula: "1 2 b3 4 5 6 7",
+    intervals: [0, 2, 3, 5, 7, 9, 11],
+    targetQuality: "m7",
+    targetLabel: "Minor tonic color and altered dominant source",
+  },
+};
 
 const PROGRESSION_DATA = {
   major_iivi: {
@@ -438,6 +488,59 @@ function getTransposedBarsForModule(moduleId, data) {
   return moduleData.bars.map((chord) => transposeChordSymbol(chord, shift, preferFlats));
 }
 
+function recommendedScaleIdForQuality(quality) {
+  if (quality === "maj7") return "ionian";
+  if (quality === "m7") return "dorian";
+  if (quality === "dom7") return "mixolydian";
+  if (quality === "m7b5") return "locrian";
+  return "melodic_minor";
+}
+
+function recommendedScaleIdForChord(chordSymbol) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return "ionian";
+  return recommendedScaleIdForQuality(parsed.quality);
+}
+
+function scalePointsForZone(root, scaleId, zone) {
+  const rootIndex = noteToIndex(root);
+  const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
+  const [minFret, maxFret] = ZONES[zone];
+  const points = [];
+  if (rootIndex < 0) return points;
+
+  for (let stringNumber = 6; stringNumber >= 1; stringNumber -= 1) {
+    for (let fret = minFret; fret <= maxFret; fret += 1) {
+      const noteIndex = (openNoteByString[stringNumber] + fret) % 12;
+      const interval = (noteIndex - rootIndex + 12) % 12;
+      if (!scale.intervals.includes(interval)) continue;
+      const degree = INTERVAL_LABELS[interval];
+      points.push({
+        stringNumber,
+        fret,
+        midi: openMidiByString[stringNumber] + fret,
+        degree,
+        isRoot: interval === 0,
+      });
+    }
+  }
+  return points;
+}
+
+function scaleRunFrequencies(root, scaleId, zone) {
+  const points = scalePointsForZone(root, scaleId, zone);
+  if (!points.length) return [];
+  const sorted = [...points].sort((a, b) => a.midi - b.midi);
+  const uniqueMidi = [...new Set(sorted.map((point) => point.midi))];
+  const limited = uniqueMidi.slice(0, 9);
+  const freqs = limited.map((midi) => 440 * Math.pow(2, (midi - 69) / 12));
+  if (freqs.length > 1) {
+    const descending = [...freqs].slice(0, freqs.length - 1).reverse();
+    return [...freqs, ...descending];
+  }
+  return freqs;
+}
+
 function rootCandidates(root, rootString) {
   const open = openNoteByString[rootString];
   const rootIdx = noteToIndex(root);
@@ -733,6 +836,51 @@ function renderDiagram(voicing) {
   return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with left mute/open marks, bottom frets, low E on bottom, and right-hand fingering numbers">${layers}</svg>`;
 }
 
+function renderScaleDiagram(root, scaleId, zone) {
+  const points = scalePointsForZone(root, scaleId, zone);
+  const [baseFret, maxFret] = ZONES[zone];
+  const fretCount = maxFret - baseFret + 1;
+  const width = 334;
+  const height = 236;
+  const left = 46;
+  const top = 24;
+  const fretGap = 40;
+  const stringGap = 24;
+  const gridWidth = fretGap * fretCount;
+  const gridHeight = stringGap * 5;
+  const bottomY = top + gridHeight;
+
+  let layers = `<rect x="${left}" y="${top}" width="${gridWidth}" height="${gridHeight}" fill="#6faecc" stroke="#6f6f6f" stroke-width="1.4"/>`;
+
+  for (let col = 0; col <= fretCount; col += 1) {
+    const x = left + col * fretGap;
+    layers += `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottomY}" stroke="#5a5a5a" stroke-width="1.2"/>`;
+  }
+
+  for (let row = 0; row <= 5; row += 1) {
+    const y = top + row * stringGap;
+    const strokeWidth = row === 5 ? 3.2 : 1.5;
+    layers += `<line x1="${left}" y1="${y}" x2="${left + gridWidth}" y2="${y}" stroke="#1f2a30" stroke-width="${strokeWidth}"/>`;
+  }
+
+  points.forEach((point) => {
+    const row = 6 - point.stringNumber;
+    const x = left + (point.fret - baseFret + 0.5) * fretGap;
+    const y = top + row * stringGap;
+    const fill = point.isRoot ? "#d62828" : "#111111";
+    const font = point.degree.length > 1 ? 7 : 9;
+    layers += `<circle cx="${x}" cy="${y}" r="9.3" fill="${fill}" stroke="white" stroke-width="1.2"/>`;
+    layers += `<text x="${x}" y="${y + 3}" text-anchor="middle" fill="white" font-family="IBM Plex Mono" font-size="${font}">${point.degree}</text>`;
+  });
+
+  for (let i = 0; i < fretCount; i += 1) {
+    const x = left + (i + 0.5) * fretGap;
+    layers += `<text x="${x}" y="${bottomY + 20}" text-anchor="middle" font-size="11" font-family="IBM Plex Mono">${baseFret + i}</text>`;
+  }
+
+  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="${root} ${scaleId} scale in ${zone} zone">${layers}</svg>`;
+}
+
 function noteFrequency(note, octave) {
   const index = noteToIndex(note);
   if (index < 0) return null;
@@ -847,6 +995,37 @@ function playGuitarStrum(ctx, notes, startTime, options = {}) {
   });
 }
 
+function playScaleRun(ctx, frequencies, startTime, options = {}) {
+  const stepSeconds = options.stepSeconds || 0.15;
+  const peakGain = options.peakGain || 0.1;
+  const releaseSeconds = options.releaseSeconds || 0.3;
+
+  frequencies.forEach((frequency, i) => {
+    const t = startTime + i * stepSeconds;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    const filter = ctx.createBiquadFilter();
+
+    osc.type = "triangle";
+    osc.frequency.setValueAtTime(frequency, t);
+    osc.detune.setValueAtTime((Math.random() - 0.5) * 2.4, t);
+
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(2700, t);
+    filter.Q.setValueAtTime(0.7, t);
+
+    gain.gain.setValueAtTime(0.0001, t);
+    gain.gain.exponentialRampToValueAtTime(peakGain, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + releaseSeconds);
+
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(t);
+    osc.stop(t + releaseSeconds + 0.04);
+  });
+}
+
 async function playChordPreview(chordSymbol, moduleId) {
   const ctx = await getAudioContext();
   const zone = moduleZone(moduleId);
@@ -872,6 +1051,38 @@ async function playTutorialVoicing(root, quality, rootString, zone, includeFifth
     strumGap: 0.028,
     peakGain: 0.115,
     releaseSeconds: 2.9,
+  });
+}
+
+async function playScalePreview(root, scaleId, zone) {
+  const ctx = await getAudioContext();
+  const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
+  if (!runFrequencies.length) return;
+  playScaleRun(ctx, runFrequencies, ctx.currentTime, {
+    stepSeconds: 0.145,
+    peakGain: 0.1,
+    releaseSeconds: 0.28,
+  });
+}
+
+async function playScaleOverChordPreview(root, scaleId) {
+  const ctx = await getAudioContext();
+  const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
+  const zone = "mid";
+  const chordSymbol = chordSymbolFromRootQuality(root, scale.targetQuality);
+  const chordNotes = chordFrequenciesFromSymbol(chordSymbol, zone);
+  const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
+  if (!chordNotes.length || !runFrequencies.length) return;
+
+  playGuitarStrum(ctx, chordNotes, ctx.currentTime, {
+    strumGap: 0.026,
+    peakGain: 0.1,
+    releaseSeconds: 2.2,
+  });
+  playScaleRun(ctx, runFrequencies, ctx.currentTime + 0.28, {
+    stepSeconds: 0.135,
+    peakGain: 0.09,
+    releaseSeconds: 0.26,
   });
 }
 
@@ -1293,6 +1504,127 @@ function wireTutorialModule() {
   });
 }
 
+function renderScaleModule() {
+  const scale = SCALE_LIBRARY[scaleModuleState.scaleId] || SCALE_LIBRARY.ionian;
+  const applyProgression = PROGRESSION_MODULES.find((module) => module.id === scaleModuleState.applyModuleId) || PROGRESSION_MODULES[0];
+  const applyData = applyProgression ? PROGRESSION_DATA[applyProgression.id] : null;
+  const applyBars = applyData ? getTransposedBarsForModule(applyProgression.id, applyData) : [];
+  const applyMarkup = applyBars
+    .map((chord, idx) => {
+      const recommendedId = recommendedScaleIdForChord(chord);
+      const recommended = SCALE_LIBRARY[recommendedId] || SCALE_LIBRARY.ionian;
+      const active = recommendedId === scaleModuleState.scaleId ? "active-bar" : "";
+      return `<div class="bar-item ${active}">Bar ${idx + 1}: <strong>${chord}</strong><br/><small>Recommended: ${recommended.name}</small></div>`;
+    })
+    .join("");
+
+  return `
+    <section class="lesson-block">
+      <h3>Step 3: Top 5 Jazz Scales</h3>
+      <div class="builder-controls">
+        <div class="builder-root-wrap">
+          <span>Root</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Scale root note">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="root-choice ${scaleModuleState.root === note ? "active" : ""}" data-scale-root-option="${note}" aria-pressed="${scaleModuleState.root === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
+        <div class="builder-extension-wrap">
+          <span>Scale</span>
+          <div class="builder-extension-group" role="radiogroup" aria-label="Scale selection">
+            ${Object.entries(SCALE_LIBRARY)
+              .map(
+                ([id, info]) =>
+                  `<button type="button" class="extension-choice scale-choice ${scaleModuleState.scaleId === id ? "active" : ""}" data-scale-option="${id}" aria-pressed="${scaleModuleState.scaleId === id ? "true" : "false"}">${info.name}</button>`
+              )
+              .join("")}
+          </div>
+        </div>
+      </div>
+      <p><strong>Formula:</strong> ${scale.formula} <span class="chip">${scale.targetLabel}</span></p>
+      <div class="player-controls">
+        <button type="button" class="start-track-btn" id="playScaleLowBtn">Play Scale (Low Zone)</button>
+        <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Scale (Mid Zone)</button>
+        <button type="button" class="start-track-btn" id="playScaleOverChordBtn">Play Over Chord</button>
+      </div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>Scale Fingerboards</h3>
+      <div class="diagram-grid">
+        <article class="chord-card">
+          <h4>Low Zone</h4>
+          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "low")}
+        </article>
+        <article class="chord-card">
+          <h4>Mid Zone</h4>
+          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "mid")}
+        </article>
+      </div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>Apply To Step 2 Progressions</h3>
+      <label>
+        Progression
+        <select id="scaleApplyProgressionSelect" class="tempo-input">
+          ${PROGRESSION_MODULES.map(
+            (module) => `<option value="${module.id}" ${module.id === scaleModuleState.applyModuleId ? "selected" : ""}>${module.title}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <p class="tutorial-card-copy">Bars highlighted in gold match your currently selected scale.</p>
+      <div class="bar-grid">${applyMarkup}</div>
+    </section>
+  `;
+}
+
+function wireScaleModule() {
+  lessonContent.querySelectorAll("[data-scale-root-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scaleModuleState.root = button.dataset.scaleRootOption || "C";
+      renderLesson();
+    });
+  });
+
+  lessonContent.querySelectorAll("[data-scale-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scaleModuleState.scaleId = button.dataset.scaleOption || "ionian";
+      renderLesson();
+    });
+  });
+
+  const applySelect = document.getElementById("scaleApplyProgressionSelect");
+  if (applySelect) {
+    applySelect.addEventListener("change", () => {
+      scaleModuleState.applyModuleId = applySelect.value;
+      renderLesson();
+    });
+  }
+
+  const playLowBtn = document.getElementById("playScaleLowBtn");
+  const playMidBtn = document.getElementById("playScaleMidBtn");
+  const playOverBtn = document.getElementById("playScaleOverChordBtn");
+
+  if (playLowBtn) {
+    playLowBtn.addEventListener("click", async () => {
+      await playScalePreview(scaleModuleState.root, scaleModuleState.scaleId, "low");
+    });
+  }
+  if (playMidBtn) {
+    playMidBtn.addEventListener("click", async () => {
+      await playScalePreview(scaleModuleState.root, scaleModuleState.scaleId, "mid");
+    });
+  }
+  if (playOverBtn) {
+    playOverBtn.addEventListener("click", async () => {
+      await playScaleOverChordPreview(scaleModuleState.root, scaleModuleState.scaleId);
+    });
+  }
+}
+
 function renderProgressionModule(module) {
   const data = PROGRESSION_DATA[module.id];
   const transposeKey = transposeSelectionByModule[module.id] || data.tonic || "C";
@@ -1421,6 +1753,12 @@ function renderLesson() {
     return;
   }
 
+  if (module.kind === "scales") {
+    lessonContent.innerHTML = renderScaleModule();
+    wireScaleModule();
+    return;
+  }
+
   lessonContent.innerHTML = renderProgressionModule(module);
   wireChordPreviewButtons();
   wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
@@ -1429,6 +1767,7 @@ function renderLesson() {
 function renderModuleNav() {
   const step1Module = MODULES.find((module) => module.kind === "tutorial");
   const step2Modules = PROGRESSION_MODULES;
+  const step3Module = MODULES.find((module) => module.kind === "scales");
 
   const step2Markup = step2Modules
     .map((module, idx) => {
@@ -1453,6 +1792,13 @@ function renderModuleNav() {
     </li>
     <li class="nav-section">Step 2: Progressions</li>
     ${step2Markup}
+    <li class="nav-section">Step 3: Scales</li>
+    <li>
+      <button type="button" data-module-id="${step3Module.id}">
+        <strong>${step3Module.title}</strong>
+        <small>${step3Module.blurb}</small>
+      </button>
+    </li>
   `;
 
   moduleNav.querySelectorAll("button").forEach((button) => {
@@ -1473,11 +1819,14 @@ function setActiveModule(moduleId) {
   safeSetStoredModule(activeModuleId);
 
   if (module.kind === "tutorial") {
-    stageModuleLabel.textContent = "Step 1 of 2";
+    stageModuleLabel.textContent = "Step 1 of 3";
+    stageTitle.textContent = module.title;
+  } else if (module.kind === "progression") {
+    const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
+    stageModuleLabel.textContent = `Step 2 of 3 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
     stageTitle.textContent = module.title;
   } else {
-    const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
-    stageModuleLabel.textContent = `Step 2 of 2 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
+    stageModuleLabel.textContent = "Step 3 of 3 - Scales";
     stageTitle.textContent = module.title;
   }
 
