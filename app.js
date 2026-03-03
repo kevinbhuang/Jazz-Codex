@@ -364,6 +364,7 @@ const stageTitle = document.getElementById("stageTitle");
 const prevModuleBtn = document.getElementById("prevModuleBtn");
 const nextModuleBtn = document.getElementById("nextModuleBtn");
 const lessonContent = document.getElementById("lessonContent");
+const easterEggGuitarBtn = document.getElementById("easterEggGuitarBtn");
 
 function safeGetStoredModule() {
   try {
@@ -2019,6 +2020,23 @@ function stepModule(direction) {
   }
 }
 
+function triggerEmojiRain() {
+  const emojis = ["🎸", "🎵", "🎶", "🎼", "🎷", "🎺", "🥁"];
+  const total = 48;
+
+  for (let i = 0; i < total; i += 1) {
+    const item = document.createElement("span");
+    item.className = "emoji-rain-item";
+    item.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+    item.style.left = `${Math.random() * 100}vw`;
+    item.style.animationDuration = `${2.7 + Math.random() * 1.8}s`;
+    item.style.animationDelay = `${Math.random() * 0.6}s`;
+    item.style.fontSize = `${1.1 + Math.random() * 1.2}rem`;
+    document.body.appendChild(item);
+    setTimeout(() => item.remove(), 4700);
+  }
+}
+
 function bootstrapApp() {
   try {
     renderModuleNav();
@@ -2026,6 +2044,9 @@ function bootstrapApp() {
 
     prevModuleBtn.addEventListener("click", () => stepModule(-1));
     nextModuleBtn.addEventListener("click", () => stepModule(1));
+    if (easterEggGuitarBtn) {
+      easterEggGuitarBtn.addEventListener("click", triggerEmojiRain);
+    }
   } catch (error) {
     console.error(error);
     if (lessonContent) {
