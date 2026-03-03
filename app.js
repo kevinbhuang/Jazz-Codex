@@ -793,6 +793,12 @@ function renderDiagram(voicing) {
   const leftX = left - 18;
   const bottomY = top + gridHeight;
 
+  const markerFill = (degree, isRoot) => {
+    if (isRoot) return "#d62828";
+    if (degree === "b3" || degree === "b7") return "#f77f00";
+    return "#111111";
+  };
+
   const numericFrets = frets.filter((fret) => Number.isInteger(fret) && fret > 0);
   const minFret = numericFrets.length ? Math.min(...numericFrets) : 1;
   const baseFret = minFret > 1 ? minFret : 1;
@@ -834,7 +840,7 @@ function renderDiagram(voicing) {
 
     if (Number.isInteger(fret) && fret > 0) {
       const x = left + (fret - baseFret + 0.5) * fretGap;
-      const fill = tone && tone.isRoot ? "#d62828" : "#111111";
+      const fill = markerFill(tone ? tone.degree : "", tone && tone.isRoot);
       const degree = tone ? tone.degree : "1";
       const degreeFont = degree.length > 1 ? 7 : 9;
       layers += `<circle cx="${x}" cy="${y}" r="9.5" fill="${fill}" stroke="white" stroke-width="1.4"/>`;
@@ -868,6 +874,12 @@ function renderScaleDiagram(root, scaleId, zone) {
   const gridHeight = stringGap * 5;
   const bottomY = top + gridHeight;
 
+  const markerFill = (degree, isRoot) => {
+    if (isRoot) return "#d62828";
+    if (degree === "b3" || degree === "b7") return "#f77f00";
+    return "#111111";
+  };
+
   let layers = `<rect x="${left}" y="${top}" width="${gridWidth}" height="${gridHeight}" fill="#6faecc" stroke="#6f6f6f" stroke-width="1.4"/>`;
 
   for (let col = 0; col <= fretCount; col += 1) {
@@ -885,7 +897,7 @@ function renderScaleDiagram(root, scaleId, zone) {
     const row = 6 - point.stringNumber;
     const x = left + (point.fret - baseFret + 0.5) * fretGap;
     const y = top + row * stringGap;
-    const fill = point.isRoot ? "#d62828" : "#111111";
+    const fill = markerFill(point.degree, point.isRoot);
     const font = point.degree.length > 1 ? 7 : 9;
     layers += `<circle cx="${x}" cy="${y}" r="9.3" fill="${fill}" stroke="white" stroke-width="1.2"/>`;
     layers += `<text x="${x}" y="${y + 3}" text-anchor="middle" fill="white" font-family="IBM Plex Mono" font-size="${font}">${point.degree}</text>`;
