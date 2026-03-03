@@ -58,16 +58,17 @@ body {
 }
 
 .easter-egg-guitar {
-  width: 2.3rem;
-  height: 2.3rem;
+  width: auto;
+  min-height: 2.3rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
-  font-size: 1.2rem;
+  font-size: 0.95rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 0;
+  padding: 0.3rem 0.75rem;
+  white-space: nowrap;
 }
 
 .emoji-rain-item {
