@@ -280,6 +280,10 @@ button {
   .diagram-grid {
     grid-template-columns: 1fr;
   }
+
+  .builder-fixed-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @keyframes fadeIn {
@@ -342,6 +346,11 @@ button {
 .play-chord-btn {
   width: 1.75rem;
   height: 1.75rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;
@@ -438,9 +447,56 @@ button {
   max-width: 340px;
 }
 
+.builder-extension-wrap {
+  display: grid;
+  gap: 0.25rem;
+  font-size: 0.88rem;
+}
+
+.builder-extension-group {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.extension-choice {
+  min-width: 2.4rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.extension-choice.active {
+  background: color-mix(in oklab, var(--accent-3), white 30%);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent), white 35%);
+}
+
+.builder-stack {
+  display: grid;
+  gap: 0.55rem;
+  width: 100%;
+}
+
+.builder-row-label {
+  margin: 0.2rem 0 0;
+  font-size: 0.92rem;
+  color: var(--muted);
+}
+
+.builder-fixed-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .play-tutorial-chord-btn {
   width: 1.75rem;
   height: 1.75rem;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
   border-radius: 999px;
   border: 1px solid var(--line);
   background: #fff;

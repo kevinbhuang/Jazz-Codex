@@ -95,9 +95,8 @@ const ROOT_NOTE_OPTIONS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A",
 
 const tutorialBuilderState = {
   root: "C",
-  quality: "maj7",
-  rootString: 6,
-  zone: "low",
+  includeFifth: false,
+  extension: "none",
 };
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
@@ -478,6 +477,44 @@ function chooseClosestFret(candidates, anchorFret) {
   return pool.sort((a, b) => Math.abs(a - anchorFret) - Math.abs(b - anchorFret) || a - b)[0];
 }
 
+function placeIntervalOnString(frets, stringNumber, interval, rootIndex, anchorFret) {
+  const arrayIdx = 6 - stringNumber;
+  if (frets[arrayIdx] !== "x") return frets;
+  const targetNoteIndex = (rootIndex + interval + 12) % 12;
+  const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
+  const fret = chooseClosestFret(candidates, anchorFret);
+  if (!Number.isInteger(fret) || fret < 0 || fret > 16) return frets;
+  const next = [...frets];
+  next[arrayIdx] = fret;
+  return next;
+}
+
+function applyBuilderOptionsToFrets(frets, template, rootIndex, anchorFret, options = {}) {
+  const includeFifth = options.includeFifth === true;
+  const extensionInterval = EXTENSION_INTERVALS[options.extension] ?? null;
+
+  let next = [...frets];
+  if (template.rootString === 6) {
+    if (includeFifth) {
+      next = placeIntervalOnString(next, 2, 7, rootIndex, anchorFret);
+    }
+    if (extensionInterval !== null) {
+      next = placeIntervalOnString(next, 1, extensionInterval, rootIndex, anchorFret);
+    }
+    return next;
+  }
+
+  if (template.rootString === 5) {
+    if (includeFifth) {
+      next = placeIntervalOnString(next, 4, 7, rootIndex, anchorFret);
+    }
+    if (extensionInterval !== null) {
+      next = placeIntervalOnString(next, 1, extensionInterval, rootIndex, anchorFret);
+    }
+  }
+  return next;
+}
+
 function resolveFingerings(frets) {
   const fretted = frets.filter((fret) => Number.isInteger(fret) && fret > 0);
   const uniqueFrets = [...new Set(fretted)].sort((a, b) => a - b);
@@ -546,7 +583,8 @@ function buildVoicing(chordSymbol, zone, options = {}) {
     return fret;
   });
 
-  const frets = applySlashBassIfNeeded(parsed, fretsBase, anchorFret);
+  const withBuilderOptions = applyBuilderOptionsToFrets(fretsBase, template, rootIndex, anchorFret, options);
+  const frets = applySlashBassIfNeeded(parsed, withBuilderOptions, anchorFret);
   const resolvedFingers = resolveFingerings(frets);
 
   const tones = frets.map((fret, idx) => {
@@ -572,7 +610,7 @@ function buildVoicing(chordSymbol, zone, options = {}) {
 function chordSymbolFromRootQuality(root, quality) {
   const normalizedRoot = normalizeNoteName(root);
   const info = CHORD_QUALITIES[quality] || CHORD_QUALITIES.maj7;
-  return ``;
+  return `${normalizedRoot}${info.symbol}`;
 }
 
 function renderDiagram(voicing) {
@@ -657,16 +695,21 @@ function noteFrequency(note, octave) {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
-function voicingFrequencies(voicing) {
-  const freqs = [];
+function voicingPlaybackNotes(voicing) {
+  const notes = [];
   for (let idx = 0; idx < 6; idx += 1) {
     const fret = voicing.frets[idx];
     if (!Number.isInteger(fret)) continue;
     const stringNumber = 6 - idx;
     const midi = openMidiByString[stringNumber] + fret;
-    freqs.push(440 * Math.pow(2, (midi - 69) / 12));
+    notes.push({
+      frequency: 440 * Math.pow(2, (midi - 69) / 12),
+      stringNumber,
+      fret,
+      midi,
+    });
   }
-  return freqs;
+  return notes;
 }
 
 async function getAudioContext() {
@@ -683,75 +726,104 @@ async function getAudioContext() {
 
 function chordFrequenciesFromSymbol(chordSymbol, zone, options = {}) {
   const voicing = buildVoicing(chordSymbol, zone, options);
-  let frequencies = voicing ? voicingFrequencies(voicing) : [];
+  let notes = voicing ? voicingPlaybackNotes(voicing) : [];
 
-  if (!frequencies.length) {
+  if (!notes.length) {
     const root = parseChordRoot(chordSymbol);
     const baseFreq = noteFrequency(root, 3);
     if (!baseFreq) return [];
-    frequencies = [baseFreq, baseFreq * 1.26, baseFreq * 1.5, baseFreq * 1.89];
+    notes = [
+      { frequency: baseFreq, stringNumber: 6, fret: null, midi: null },
+      { frequency: baseFreq * 1.26, stringNumber: 4, fret: null, midi: null },
+      { frequency: baseFreq * 1.5, stringNumber: 3, fret: null, midi: null },
+      { frequency: baseFreq * 1.89, stringNumber: 2, fret: null, midi: null },
+    ];
   }
 
-  return frequencies;
+  return notes;
 }
 
-function playGuitarStrum(ctx, frequencies, startTime, options = {}) {
+function playGuitarStrum(ctx, notes, startTime, options = {}) {
   const strumGap = options.strumGap || 0.028;
   const peakGain = options.peakGain || 0.115;
   const releaseSeconds = options.releaseSeconds || 2.9;
 
-  frequencies.forEach((frequency, i) => {
+  const timbreByString = {
+    6: { cutoff: 1800, q: 0.9, gainScale: 1.18, releaseScale: 1.2, harmonicMix: 0.58 },
+    5: { cutoff: 2000, q: 0.88, gainScale: 1.12, releaseScale: 1.1, harmonicMix: 0.55 },
+    4: { cutoff: 2200, q: 0.84, gainScale: 1.04, releaseScale: 1.03, harmonicMix: 0.52 },
+    3: { cutoff: 2450, q: 0.8, gainScale: 0.98, releaseScale: 0.98, harmonicMix: 0.5 },
+    2: { cutoff: 2700, q: 0.75, gainScale: 0.94, releaseScale: 0.92, harmonicMix: 0.46 },
+    1: { cutoff: 3000, q: 0.72, gainScale: 0.9, releaseScale: 0.86, harmonicMix: 0.42 },
+  };
+
+  notes.forEach((noteEntry, i) => {
+    const frequency = typeof noteEntry === "number" ? noteEntry : noteEntry.frequency;
+    if (!Number.isFinite(frequency)) return;
+    const stringNumber =
+      typeof noteEntry === "number" ? 3 : Number.isInteger(noteEntry.stringNumber) ? noteEntry.stringNumber : 3;
+    const timbre = timbreByString[stringNumber] || timbreByString[3];
     const t = startTime + i * strumGap;
     const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
     const osc1 = ctx.createOscillator();
     const osc2 = ctx.createOscillator();
+    const harmonicGain = ctx.createGain();
 
     filter.type = "lowpass";
-    filter.frequency.setValueAtTime(2600, t);
-    filter.Q.setValueAtTime(0.8, t);
+    filter.frequency.setValueAtTime(timbre.cutoff, t);
+    filter.Q.setValueAtTime(timbre.q, t);
 
     osc1.type = "triangle";
     osc2.type = "sine";
     osc1.frequency.setValueAtTime(frequency, t);
     osc2.frequency.setValueAtTime(frequency * 2, t);
-    osc1.detune.setValueAtTime((Math.random() - 0.5) * 4, t);
-    osc2.detune.setValueAtTime((Math.random() - 0.5) * 4, t);
+    osc1.detune.setValueAtTime((Math.random() - 0.5) * 3.5, t);
+    osc2.detune.setValueAtTime((Math.random() - 0.5) * 3 + (stringNumber - 3) * 0.25, t);
 
+    const notePeak = peakGain * timbre.gainScale;
+    const noteRelease = releaseSeconds * timbre.releaseScale;
     gain.gain.setValueAtTime(0.0001, t);
-    gain.gain.exponentialRampToValueAtTime(peakGain, t + 0.01);
-    gain.gain.exponentialRampToValueAtTime(0.0001, t + releaseSeconds);
+    gain.gain.exponentialRampToValueAtTime(notePeak, t + 0.01);
+    gain.gain.exponentialRampToValueAtTime(0.0001, t + noteRelease);
+
+    harmonicGain.gain.setValueAtTime(timbre.harmonicMix, t);
 
     osc1.connect(filter);
-    osc2.connect(filter);
+    osc2.connect(harmonicGain);
+    harmonicGain.connect(filter);
     filter.connect(gain);
     gain.connect(ctx.destination);
 
     osc1.start(t);
     osc2.start(t);
-    osc1.stop(t + releaseSeconds + 0.05);
-    osc2.stop(t + releaseSeconds + 0.05);
+    osc1.stop(t + noteRelease + 0.05);
+    osc2.stop(t + noteRelease + 0.05);
   });
 }
 
 async function playChordPreview(chordSymbol, moduleId) {
   const ctx = await getAudioContext();
   const zone = zoneSelectionByModule[moduleId] || "low";
-  const frequencies = chordFrequenciesFromSymbol(chordSymbol, zone);
-  if (!frequencies.length) return;
-  playGuitarStrum(ctx, frequencies, ctx.currentTime, {
+  const notes = chordFrequenciesFromSymbol(chordSymbol, zone);
+  if (!notes.length) return;
+  playGuitarStrum(ctx, notes, ctx.currentTime, {
     strumGap: 0.028,
     peakGain: 0.115,
     releaseSeconds: 2.9,
   });
 }
 
-async function playTutorialVoicing(root, quality, rootString, zone) {
+async function playTutorialVoicing(root, quality, rootString, zone, includeFifth = false, extension = "none") {
   const ctx = await getAudioContext();
   const chordSymbol = chordSymbolFromRootQuality(root, quality);
-  const frequencies = chordFrequenciesFromSymbol(chordSymbol, zone, { preferredRootString: rootString });
-  if (!frequencies.length) return;
-  playGuitarStrum(ctx, frequencies, ctx.currentTime, {
+  const notes = chordFrequenciesFromSymbol(chordSymbol, zone, {
+    preferredRootString: rootString,
+    includeFifth,
+    extension,
+  });
+  if (!notes.length) return;
+  playGuitarStrum(ctx, notes, ctx.currentTime, {
     strumGap: 0.028,
     peakGain: 0.115,
     releaseSeconds: 2.9,
@@ -804,10 +876,10 @@ function scheduleCompingChord(time, chordSymbol, beatInBar) {
   if (beatInBar !== 1 && beatInBar !== 3) return;
   const ctx = backingTrackState.audioCtx;
   const zone = zoneSelectionByModule[backingTrackState.moduleId] || "low";
-  const frequencies = chordFrequenciesFromSymbol(chordSymbol, zone);
-  if (!frequencies.length) return;
+  const notes = chordFrequenciesFromSymbol(chordSymbol, zone);
+  if (!notes.length) return;
 
-  playGuitarStrum(ctx, frequencies, time, {
+  playGuitarStrum(ctx, notes, time, {
     strumGap: 0.028,
     peakGain: 0.115,
     releaseSeconds: 2.9,
@@ -940,6 +1012,32 @@ function qualitySummary(quality) {
   return { label: "Chord", formula: "1 3 7" };
 }
 
+const EXTENSION_INTERVALS = {
+  none: null,
+  "9": 2,
+  "11": 5,
+  "13": 9,
+};
+
+function tutorialFormulaWithOptions(baseFormula, includeFifth, extension) {
+  const tones = baseFormula.split(" ");
+  if (includeFifth && !tones.includes("5")) {
+    tones.splice(2, 0, "5");
+  }
+  if (extension && extension !== "none" && !tones.includes(extension)) {
+    tones.push(extension);
+  }
+  return tones.join(" ");
+}
+
+function displayChordSymbol(root, quality, includeFifth, extension) {
+  const base = chordSymbolFromRootQuality(root, quality);
+  const extras = [];
+  if (includeFifth) extras.push("5");
+  if (extension && extension !== "none") extras.push(extension);
+  return extras.length ? `${base}(${extras.join(",")})` : base;
+}
+
 function renderTutorialShellCard(root, quality, rootString, zone) {
   const chordSymbol = chordSymbolFromRootQuality(root, quality);
   const voicing = buildVoicing(chordSymbol, zone, { preferredRootString: rootString });
@@ -966,12 +1064,41 @@ function renderTutorialShellCard(root, quality, rootString, zone) {
   `;
 }
 
-function renderTutorialModule() {
-  const builderChordSymbol = chordSymbolFromRootQuality(tutorialBuilderState.root, tutorialBuilderState.quality);
-  const builderVoicing = buildVoicing(builderChordSymbol, tutorialBuilderState.zone, {
-    preferredRootString: tutorialBuilderState.rootString,
+function renderTutorialBuilderCard(root, quality, rootString, zone, includeFifth, extension) {
+  const chordSymbol = chordSymbolFromRootQuality(root, quality);
+  const labelSymbol = displayChordSymbol(root, quality, includeFifth, extension);
+  const voicing = buildVoicing(chordSymbol, zone, {
+    preferredRootString: rootString,
+    includeFifth,
+    extension,
   });
+  if (!voicing) return "";
 
+  const summary = qualitySummary(quality);
+  const formula = tutorialFormulaWithOptions(summary.formula, includeFifth, extension);
+  return `
+    <article class="chord-card">
+      <div class="chord-card-top">
+        <h4>${labelSymbol}</h4>
+        <button
+          type="button"
+          class="play-tutorial-chord-btn"
+          data-root="${root}"
+          data-quality="${quality}"
+          data-root-string="${rootString}"
+          data-zone="${zone}"
+          data-include-fifth="${includeFifth ? "1" : "0"}"
+          data-extension="${extension}"
+          aria-label="Play ${labelSymbol}"
+        >🔈</button>
+      </div>
+      ${renderDiagram(voicing)}
+      <p class="tutorial-card-copy">${summary.label} | Root on string ${rootString} | Formula: ${formula}</p>
+    </article>
+  `;
+}
+
+function renderTutorialModule() {
   const root6Cards = ["maj7", "m7", "dom7"]
     .map((quality) => renderTutorialShellCard("C", quality, 6, "low"))
     .join("");
@@ -980,34 +1107,40 @@ function renderTutorialModule() {
     .map((quality) => renderTutorialShellCard("C", quality, 5, "mid"))
     .join("");
 
-  const builderSummary = qualitySummary(tutorialBuilderState.quality);
+  const builderTopRow = [
+    { quality: "maj7", rootString: 6, zone: "low" },
+    { quality: "m7", rootString: 6, zone: "low" },
+    { quality: "dom7", rootString: 6, zone: "low" },
+  ]
+    .map(({ quality, rootString, zone }) =>
+      renderTutorialBuilderCard(
+        tutorialBuilderState.root,
+        quality,
+        rootString,
+        zone,
+        tutorialBuilderState.includeFifth,
+        tutorialBuilderState.extension
+      )
+    )
+    .join("");
+  const builderBottomRow = [
+    { quality: "maj7", rootString: 5, zone: "mid" },
+    { quality: "m7", rootString: 5, zone: "mid" },
+    { quality: "dom7", rootString: 5, zone: "mid" },
+  ]
+    .map(({ quality, rootString, zone }) =>
+      renderTutorialBuilderCard(
+        tutorialBuilderState.root,
+        quality,
+        rootString,
+        zone,
+        tutorialBuilderState.includeFifth,
+        tutorialBuilderState.extension
+      )
+    )
+    .join("");
 
   return `
-    <section class="lesson-block">
-      <h3>Step 1 Tutorial: Build Shell Chords Yourself</h3>
-      <p>Start with shell chords so you can comp through jazz standards quickly without memorizing huge grips.</p>
-      <ol class="tutorial-list">
-        <li>Pick the root note on string 6 or string 5.</li>
-        <li>Choose chord quality: maj7, m7, or 7.</li>
-        <li>Add the guide tones (3rd and 7th) around that root.</li>
-        <li>Move the same shape to any root to build chords in new keys.</li>
-      </ol>
-    </section>
-
-    <section class="lesson-block">
-      <h3>How Chords Are Constructed</h3>
-      <table class="formula-table">
-        <thead>
-          <tr><th>Quality</th><th>Formula</th><th>What Defines It</th></tr>
-        </thead>
-        <tbody>
-          <tr><td>Major 7</td><td>1 3 7</td><td>Major 3rd + Major 7th</td></tr>
-          <tr><td>Minor 7</td><td>1 b3 b7</td><td>Minor 3rd + Minor 7th</td></tr>
-          <tr><td>Dominant 7</td><td>1 3 b7</td><td>Major 3rd + Minor 7th</td></tr>
-        </tbody>
-      </table>
-    </section>
-
     <section class="lesson-block">
       <h3>6th-String Root Shell Examples (C Root)</h3>
       <div class="diagram-grid tutorial-grid">${root6Cards}</div>
@@ -1028,46 +1161,27 @@ function renderTutorialModule() {
           </select>
         </label>
         <label>
-          Quality
-          <select id="builderQuality">
-            <option value="maj7" ${tutorialBuilderState.quality === "maj7" ? "selected" : ""}>maj7</option>
-            <option value="m7" ${tutorialBuilderState.quality === "m7" ? "selected" : ""}>m7</option>
-            <option value="dom7" ${tutorialBuilderState.quality === "dom7" ? "selected" : ""}>7</option>
-          </select>
+          <span>Add 5th</span>
+          <input id="builderIncludeFifth" type="checkbox" ${tutorialBuilderState.includeFifth ? "checked" : ""}/>
         </label>
-        <label>
-          Root string
-          <select id="builderRootString">
-            <option value="6" ${tutorialBuilderState.rootString === 6 ? "selected" : ""}>6th string</option>
-            <option value="5" ${tutorialBuilderState.rootString === 5 ? "selected" : ""}>5th string</option>
-          </select>
-        </label>
-        <label>
-          Neck zone
-          <select id="builderZone">
-            <option value="low" ${tutorialBuilderState.zone === "low" ? "selected" : ""}>Low</option>
-            <option value="mid" ${tutorialBuilderState.zone === "mid" ? "selected" : ""}>Mid</option>
-          </select>
-        </label>
+        <div class="builder-extension-wrap">
+          <span>Add extension</span>
+          <div class="builder-extension-group" role="radiogroup" aria-label="Add extension">
+            <button type="button" class="extension-choice ${tutorialBuilderState.extension === "none" ? "active" : ""}" data-extension-option="none" aria-pressed="${tutorialBuilderState.extension === "none" ? "true" : "false"}">None</button>
+            <button type="button" class="extension-choice ${tutorialBuilderState.extension === "9" ? "active" : ""}" data-extension-option="9" aria-pressed="${tutorialBuilderState.extension === "9" ? "true" : "false"}">9</button>
+            <button type="button" class="extension-choice ${tutorialBuilderState.extension === "11" ? "active" : ""}" data-extension-option="11" aria-pressed="${tutorialBuilderState.extension === "11" ? "true" : "false"}">11</button>
+            <button type="button" class="extension-choice ${tutorialBuilderState.extension === "13" ? "active" : ""}" data-extension-option="13" aria-pressed="${tutorialBuilderState.extension === "13" ? "true" : "false"}">13</button>
+          </div>
+        </div>
       </div>
 
       <div class="builder-output">
-        <article class="chord-card builder-card">
-          <div class="chord-card-top">
-            <h4>${builderChordSymbol}</h4>
-            <button
-              type="button"
-              class="play-tutorial-chord-btn"
-              data-root="${tutorialBuilderState.root}"
-              data-quality="${tutorialBuilderState.quality}"
-              data-root-string="${tutorialBuilderState.rootString}"
-              data-zone="${tutorialBuilderState.zone}"
-              aria-label="Play ${builderChordSymbol}"
-            >🔈</button>
-          </div>
-          ${builderVoicing ? renderDiagram(builderVoicing) : "<p>Unable to build this voicing.</p>"}
-          <p class="tutorial-card-copy">Formula: ${builderSummary.formula} | Root on string ${tutorialBuilderState.rootString}</p>
-        </article>
+        <div class="builder-stack">
+          <h4 class="builder-row-label">6th-string root</h4>
+          <div class="diagram-grid tutorial-grid builder-fixed-grid">${builderTopRow || "<p>Unable to build top row voicings.</p>"}</div>
+          <h4 class="builder-row-label">5th-string root</h4>
+          <div class="diagram-grid tutorial-grid builder-fixed-grid">${builderBottomRow || "<p>Unable to build bottom row voicings.</p>"}</div>
+        </div>
       </div>
     </section>
   `;
@@ -1075,9 +1189,8 @@ function renderTutorialModule() {
 
 function wireTutorialModule() {
   const rootSelect = document.getElementById("builderRoot");
-  const qualitySelect = document.getElementById("builderQuality");
-  const rootStringSelect = document.getElementById("builderRootString");
-  const zoneSelect = document.getElementById("builderZone");
+  const includeFifthInput = document.getElementById("builderIncludeFifth");
+  const extensionButtons = lessonContent.querySelectorAll("[data-extension-option]");
 
   const rerender = () => {
     renderLesson();
@@ -1090,26 +1203,20 @@ function wireTutorialModule() {
     });
   }
 
-  if (qualitySelect) {
-    qualitySelect.addEventListener("change", () => {
-      tutorialBuilderState.quality = qualitySelect.value;
+  if (includeFifthInput) {
+    includeFifthInput.addEventListener("change", () => {
+      tutorialBuilderState.includeFifth = includeFifthInput.checked;
       rerender();
     });
   }
 
-  if (rootStringSelect) {
-    rootStringSelect.addEventListener("change", () => {
-      tutorialBuilderState.rootString = rootStringSelect.value === "5" ? 5 : 6;
+  extensionButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      const nextExtension = button.dataset.extensionOption || "none";
+      tutorialBuilderState.extension = ["9", "11", "13"].includes(nextExtension) ? nextExtension : "none";
       rerender();
     });
-  }
-
-  if (zoneSelect) {
-    zoneSelect.addEventListener("change", () => {
-      tutorialBuilderState.zone = zoneSelect.value === "mid" ? "mid" : "low";
-      rerender();
-    });
-  }
+  });
 
   lessonContent.querySelectorAll(".play-tutorial-chord-btn").forEach((button) => {
     button.addEventListener("click", async () => {
@@ -1117,7 +1224,11 @@ function wireTutorialModule() {
       const quality = button.dataset.quality || "maj7";
       const rootString = Number(button.dataset.rootString || 6);
       const zone = button.dataset.zone === "mid" ? "mid" : "low";
-      await playTutorialVoicing(root, quality, rootString, zone);
+      const includeFifth = button.dataset.includeFifth === "1";
+      const extension = ["9", "11", "13"].includes(button.dataset.extension || "")
+        ? button.dataset.extension
+        : "none";
+      await playTutorialVoicing(root, quality, rootString, zone, includeFifth, extension);
     });
   });
 }
