@@ -306,69 +306,77 @@ function buildVoicing(root, quality, zone, shape) {
 
 function renderDiagram(voicing) {
   const { frets, tones, resolvedFingers } = voicing;
-  const width = 290;
-  const height = 250;
-  const left = 28;
-  const top = 30;
+  const width = 420;
+  const height = 290;
+  const left = 60;
+  const top = 34;
+  const fretGap = 62;
   const stringGap = 32;
-  const fretGap = 36;
-  const rightColX = left + stringGap * 5 + 38;
+  const gridWidth = fretGap * 4;
+  const gridHeight = stringGap * 5;
+  const rightX = left + gridWidth + 30;
+  const leftX = left - 24;
+  const bottomY = top + gridHeight;
 
-  const numericFrets = frets.filter((fret) => Number.isInteger(fret));
-  const positiveFrets = numericFrets.filter((fret) => fret > 0);
-  const minFret = positiveFrets.length ? Math.min(...positiveFrets) : 1;
+  const numericFrets = frets.filter((fret) => Number.isInteger(fret) && fret > 0);
+  const minFret = numericFrets.length ? Math.min(...numericFrets) : 1;
   const baseFret = minFret > 1 ? minFret : 1;
 
-  let lines = "";
-  for (let i = 0; i < 6; i += 1) {
-    const x = left + i * stringGap;
-    lines += `<line x1="${x}" y1="${top}" x2="${x}" y2="${top + fretGap * 4}" stroke="currentColor"/>`;
+  let layers = `<rect x="${left}" y="${top}" width="${gridWidth}" height="${gridHeight}" fill="#6faecc" stroke="#6f6f6f" stroke-width="1.4"/>`;
+
+  for (let col = 0; col <= 4; col += 1) {
+    const x = left + col * fretGap;
+    layers += `<line x1="${x}" y1="${top}" x2="${x}" y2="${bottomY}" stroke="#5a5a5a" stroke-width="1.2"/>`;
   }
 
-  for (let i = 0; i < 5; i += 1) {
-    const y = top + i * fretGap;
-    lines += `<line x1="${left}" y1="${y}" x2="${left + stringGap * 5}" y2="${y}" stroke="currentColor"/>`;
+  for (let row = 0; row <= 5; row += 1) {
+    const y = top + row * stringGap;
+    const strokeWidth = row === 5 ? 3.2 : 1.5;
+    layers += `<line x1="${left}" y1="${y}" x2="${left + gridWidth}" y2="${y}" stroke="#1f2a30" stroke-width="${strokeWidth}"/>`;
   }
 
   if (baseFret === 1) {
-    lines += `<line x1="${left}" y1="${top}" x2="${left + stringGap * 5}" y2="${top}" stroke="currentColor" stroke-width="4"/>`;
+    layers += `<line x1="${left}" y1="${top}" x2="${left}" y2="${bottomY}" stroke="#f6f6f6" stroke-width="3.5"/>`;
   }
 
-  let markers = "";
-  let fingerLabels = `<text x="${rightColX - 12}" y="${top - 10}" font-size="11" font-family="IBM Plex Mono">LH</text>`;
+  layers += `<text x="${rightX - 7}" y="${top - 10}" font-size="11" font-family="IBM Plex Mono" fill="#1f2a30">LH</text>`;
 
-  for (let stringIdx = 0; stringIdx < 6; stringIdx += 1) {
-    const x = left + stringIdx * stringGap;
-    const fret = frets[stringIdx];
+  for (let row = 0; row < 6; row += 1) {
+    const stringNumber = row + 1;
+    const arrayIdx = 6 - stringNumber;
+    const fret = frets[arrayIdx];
+    const tone = tones[arrayIdx];
+    const finger = resolvedFingers[arrayIdx];
+    const y = top + row * stringGap;
 
     if (fret === "x") {
-      markers += `<text x="${x - 4}" y="${top - 10}" font-size="16">x</text>`;
-      continue;
+      layers += `<text x="${leftX}" y="${y + 6}" font-size="18" font-weight="700">x</text>`;
     }
 
     if (fret === 0) {
-      markers += `<text x="${x - 4}" y="${top - 10}" font-size="16">o</text>`;
-      continue;
+      layers += `<text x="${leftX}" y="${y + 6}" font-size="18" font-weight="700">o</text>`;
     }
 
-    const y = top + (fret - baseFret + 0.5) * fretGap;
-    const tone = tones[stringIdx];
-    const degreeLabel = tone ? tone.degree : "";
-    const fill = tone && tone.isRoot ? "#d62828" : "#111111";
-    const degreeFontSize = degreeLabel.length > 1 ? 8 : 10;
+    if (Number.isInteger(fret) && fret > 0) {
+      const x = left + (fret - baseFret + 0.5) * fretGap;
+      const fill = tone && tone.isRoot ? "#d62828" : "#111111";
+      const degree = tone ? tone.degree : "?";
+      const degreeFont = degree.length > 1 ? 8 : 10;
+      layers += `<circle cx="${x}" cy="${y}" r="12" fill="${fill}" stroke="white" stroke-width="1.4"/>`;
+      layers += `<text x="${x}" y="${y + 3}" text-anchor="middle" fill="white" font-family="IBM Plex Mono" font-size="${degreeFont}">${degree}</text>`;
+    }
 
-    markers += `<circle cx="${x}" cy="${y}" r="11" fill="${fill}" stroke="white" stroke-width="1.5"/>`;
-    markers += `<text x="${x}" y="${y + 3}" text-anchor="middle" font-size="${degreeFontSize}" fill="white" font-family="IBM Plex Mono">${degreeLabel}</text>`;
-
-    const finger = resolvedFingers[stringIdx];
     if (finger !== "x" && finger !== "o") {
-      fingerLabels += `<text x="${rightColX}" y="${y + 4}" font-size="13" font-weight="700">${finger}</text>`;
+      layers += `<text x="${rightX}" y="${y + 5}" font-size="14" font-weight="700">${finger}</text>`;
     }
   }
 
-  const fretLabel = baseFret > 1 ? `<text x="4" y="${top + 18}" font-size="12">${baseFret}fr</text>` : "";
+  for (let i = 0; i < 4; i += 1) {
+    const fretLabelX = left + (i + 0.5) * fretGap;
+    layers += `<text x="${fretLabelX}" y="${bottomY + 28}" text-anchor="middle" font-size="14" font-family="IBM Plex Mono">${baseFret + i}</text>`;
+  }
 
-  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with fingering">${lines}${markers}${fingerLabels}${fretLabel}</svg>`;
+  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with left-side mute marks, bottom fret numbers, and right-side fingerings">${layers}</svg>`;
 }
 
 function updateChordBuilder() {
