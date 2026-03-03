@@ -1941,7 +1941,6 @@ function renderModuleNav() {
         <li>
           <button type="button" data-module-id="${module.id}">
             <strong>${idx + 1}. ${module.title}</strong>
-            <small>${module.blurb}</small>
           </button>
         </li>
       `;
@@ -1953,7 +1952,6 @@ function renderModuleNav() {
     <li>
       <button type="button" data-module-id="${step1Module.id}">
         <strong>${step1Module.title}</strong>
-        <small>${step1Module.blurb}</small>
       </button>
     </li>
     <li class="nav-section">Step 2: Progressions</li>
@@ -1962,7 +1960,6 @@ function renderModuleNav() {
     <li>
       <button type="button" data-module-id="${step3Module.id}">
         <strong>${step3Module.title}</strong>
-        <small>${step3Module.blurb}</small>
       </button>
     </li>
   `;
