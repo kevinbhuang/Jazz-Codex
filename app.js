@@ -1559,7 +1559,7 @@ function renderScaleModule() {
 
   return `
     <section class="lesson-block">
-      <h3>Step 3: Top 5 Jazz Scales</h3>
+      <h3>Jazz Scales</h3>
       <div class="builder-controls">
         <div class="builder-root-wrap">
           <span>Root</span>
@@ -1588,10 +1588,7 @@ function renderScaleModule() {
         <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Scale (Mid Zone)</button>
         <button type="button" class="start-track-btn" id="playScaleOverChordBtn">Play Over Chord</button>
       </div>
-    </section>
-
-    <section class="lesson-block">
-      <h3>Scale Fingerboards</h3>
+      <h4>Scale Fingerboards</h4>
       <div class="diagram-grid">
         <article class="chord-card">
           <h4>Low Zone</h4>
