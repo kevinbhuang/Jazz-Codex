@@ -2,34 +2,107 @@ const NOTES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
 
 const MODULES = [
   {
-    id: "welcome",
+    id: "major_iivi_c",
     step: "Module 1",
-    title: "Orientation + Diagram Reading",
-    blurb: "Get clear on how this tutorial works before touching voicings.",
+    title: "Major ii-V-I in C",
+    kind: "progression",
+    blurb: "Your core jazz cadence: Dm7 -> G7 -> Cmaj7.",
   },
   {
-    id: "builder",
+    id: "minor_iivi_a",
     step: "Module 2",
-    title: "Chord Construction",
-    blurb: "Build chords from interval formulas, not shape memory.",
+    title: "Minor ii-V-i in A Minor",
+    kind: "progression",
+    blurb: "Essential minor movement: Bm7b5 -> E7 -> Am7.",
   },
   {
-    id: "voicings",
+    id: "turnaround_c",
     step: "Module 3",
-    title: "Neck Mapping",
-    blurb: "Play one harmony in different neck zones.",
+    title: "Turnaround I-vi-ii-V in C",
+    kind: "progression",
+    blurb: "The loop behind countless jazz intros and endings.",
   },
   {
-    id: "progressions",
+    id: "blues_f",
     step: "Module 4",
-    title: "Progression Fluency",
-    blurb: "Practice ii-V-I and turnarounds with voice leading.",
+    title: "12-Bar Jazz Blues in F",
+    kind: "progression",
+    blurb: "Comp through a blues form with jazz harmony.",
   },
   {
-    id: "roadmap",
+    id: "bridge_cycle",
     step: "Module 5",
-    title: "Weekly Practice Plan",
-    blurb: "Track progress from first jazz comp to intermediate confidence.",
+    title: "Cycle of Dominants (Rhythm-Changes Bridge)",
+    kind: "progression",
+    blurb: "E7 -> A7 -> D7 -> G7 voice-leading workout.",
+  },
+  {
+    id: "songs",
+    step: "Module 6",
+    title: "Songs You Can Play Now",
+    kind: "songs",
+    blurb: "Apply these progressions to real tunes.",
+  },
+];
+
+const PROGRESSION_DATA = {
+  major_iivi_c: {
+    keyLabel: "C major",
+    zone: "low",
+    bars: ["Dm7", "G7", "Cmaj7", "Cmaj7"],
+    focus: "Keep chord changes legato by moving each voice the shortest distance.",
+    groove: "Comp with quarter notes at 60-90 bpm. Accent beats 2 and 4.",
+  },
+  minor_iivi_a: {
+    keyLabel: "A minor",
+    zone: "low",
+    bars: ["Bm7b5", "E7", "Am7", "Am7"],
+    focus: "Hear the tension in E7 resolving to Am7 without rushing.",
+    groove: "Play each bar twice before advancing tempo.",
+  },
+  turnaround_c: {
+    keyLabel: "C major",
+    zone: "mid",
+    bars: ["Cmaj7", "Am7", "Dm7", "G7"],
+    focus: "Treat this as a loop: start and end on Cmaj7 with identical time feel.",
+    groove: "Try 2 bars per chord, then 1 bar per chord.",
+  },
+  blues_f: {
+    keyLabel: "F blues",
+    zone: "low",
+    bars: ["F7", "Bb7", "F7", "F7", "Bb7", "Bb7", "F7", "D7", "Gm7", "C7", "F7", "C7"],
+    focus: "Lock the form first. Count all 12 bars out loud while comping.",
+    groove: "Use a swung quarter-note pulse before adding rhythmic variations.",
+  },
+  bridge_cycle: {
+    keyLabel: "Dominant cycle",
+    zone: "mid",
+    bars: ["E7", "A7", "D7", "G7"],
+    focus: "Voice-lead the 3rd and 7th smoothly through the cycle.",
+    groove: "Loop this for 3-5 minutes without stopping.",
+  },
+};
+
+const SONG_SUGGESTIONS = [
+  {
+    title: "Autumn Leaves",
+    use: "Major and minor ii-V-I movement",
+  },
+  {
+    title: "Blue Bossa",
+    use: "Minor ii-V-i and major ii-V-I",
+  },
+  {
+    title: "Satin Doll",
+    use: "Turnaround and ii-V progressions",
+  },
+  {
+    title: "C Jam Blues",
+    use: "12-bar jazz blues form",
+  },
+  {
+    title: "I Got Rhythm (or rhythm-changes backing tracks)",
+    use: "Dominant-cycle bridge practice",
   },
 ];
 
@@ -66,29 +139,6 @@ const CHORD_QUALITIES = {
   },
 };
 
-const LESSONS = [
-  {
-    title: "Week 1: Guide tones (3rd + 7th)",
-    detail: "Play 3rd/7th only for Cmaj7, Dm7, G7 in 3 neck areas.",
-  },
-  {
-    title: "Week 2: Shell voicings",
-    detail: "Add roots and comp ii-V-I in 4 keys at 60 bpm.",
-  },
-  {
-    title: "Week 3: Drop-2 voicings",
-    detail: "Connect nearest shape on each barline.",
-  },
-  {
-    title: "Week 4: Turnarounds",
-    detail: "Practice I-vi-ii-V in all 12 keys with swing rhythm.",
-  },
-  {
-    title: "Week 5+: Standards",
-    detail: "Apply fluency to Autumn Leaves and Blue Bossa.",
-  },
-];
-
 const SHAPES = {
   maj7: [
     {
@@ -102,12 +152,6 @@ const SHAPES = {
       offsets: [null, 0, 1, 1, null, null],
       fingers: [null, 1, 3, 4, null, null],
       rootString: 5,
-    },
-    {
-      name: "Drop-2 flavor",
-      offsets: [0, null, 1, 0, 0, null],
-      fingers: [1, null, 4, 2, 3, null],
-      rootString: 6,
     },
   ],
   m7: [
@@ -123,12 +167,6 @@ const SHAPES = {
       fingers: [null, 1, 2, 3, null, null],
       rootString: 5,
     },
-    {
-      name: "Drop-2 flavor",
-      offsets: [0, null, 0, 0, 1, null],
-      fingers: [1, null, 2, 3, 4, null],
-      rootString: 6,
-    },
   ],
   dom7: [
     {
@@ -142,12 +180,6 @@ const SHAPES = {
       offsets: [null, 0, 0, 1, null, null],
       fingers: [null, 1, 2, 4, null, null],
       rootString: 5,
-    },
-    {
-      name: "Drop-2 flavor",
-      offsets: [0, null, 0, 1, 0, null],
-      fingers: [1, null, 2, 4, 3, null],
-      rootString: 6,
     },
   ],
   m7b5: [
@@ -163,31 +195,13 @@ const SHAPES = {
       fingers: [2, null, 4, 1, 1, null],
       rootString: 6,
     },
-    {
-      name: "Guide-tone shape",
-      offsets: [null, 0, null, 0, 1, null],
-      fingers: [null, 1, null, 2, 4, null],
-      rootString: 5,
-    },
   ],
   dim7: [
     {
-      name: "Symmetric grip A",
-      offsets: [0, null, -1, 0, -1, null],
-      fingers: [2, null, 1, 3, 4, null],
-      rootString: 6,
-    },
-    {
-      name: "Symmetric grip B",
+      name: "Symmetric grip",
       offsets: [null, 0, -1, 0, -1, null],
       fingers: [null, 2, 1, 3, 4, null],
       rootString: 5,
-    },
-    {
-      name: "Tight top-set",
-      offsets: [null, null, 0, 1, 0, 1],
-      fingers: [null, null, 1, 3, 2, 4],
-      rootString: 4,
     },
   ],
 };
@@ -212,18 +226,7 @@ const stageModuleLabel = document.getElementById("stageModuleLabel");
 const stageTitle = document.getElementById("stageTitle");
 const prevModuleBtn = document.getElementById("prevModuleBtn");
 const nextModuleBtn = document.getElementById("nextModuleBtn");
-const lessonViews = Array.from(document.querySelectorAll(".lesson-view"));
-
-const rootSelect = document.getElementById("rootSelect");
-const qualitySelect = document.getElementById("qualitySelect");
-const keySelect = document.getElementById("keySelect");
-const zoneSelect = document.getElementById("zoneSelect");
-const formulaLine = document.getElementById("formulaLine");
-const notesLine = document.getElementById("notesLine");
-const voicingCards = document.getElementById("voicingCards");
-const progressionOut = document.getElementById("progressionOut");
-const lessonList = document.getElementById("lessonList");
-const newProgressionBtn = document.getElementById("newProgressionBtn");
+const lessonContent = document.getElementById("lessonContent");
 
 let activeModuleId = localStorage.getItem("activeJazzModule") || MODULES[0].id;
 
@@ -231,16 +234,11 @@ function noteToIndex(note) {
   return NOTES.indexOf(note);
 }
 
-function transpose(root, semitones) {
-  const idx = noteToIndex(root);
-  return NOTES[(idx + semitones + 12) % 12];
-}
-
 function findRootFret(root, rootString, zone) {
   const open = openNoteByString[rootString];
   const rootIdx = noteToIndex(root);
   const [minFret, maxFret] = ZONES[zone];
-  let candidates = [];
+  const candidates = [];
 
   for (let fret = 0; fret <= 16; fret += 1) {
     if ((open + fret) % 12 === rootIdx) {
@@ -254,15 +252,40 @@ function findRootFret(root, rootString, zone) {
   return usable.sort((a, b) => Math.abs(a - center) - Math.abs(b - center))[0];
 }
 
+function parseChordSymbol(chordSymbol) {
+  const qualities = ["maj7", "m7b5", "m7", "dim7", "7"];
+  for (const suffix of qualities) {
+    if (chordSymbol.endsWith(suffix)) {
+      const root = chordSymbol.slice(0, chordSymbol.length - suffix.length);
+      const quality = suffix === "7" ? "dom7" : suffix;
+      return { root, quality, symbol: chordSymbol };
+    }
+  }
+  return null;
+}
+
+function chooseShape(quality, root) {
+  const options = SHAPES[quality] || SHAPES.maj7;
+  const rootIndex = noteToIndex(root);
+  if (rootIndex >= 7 && options[1]) return options[1];
+  return options[0];
+}
+
 function guessFinger(fret, minFret) {
   return String(Math.max(1, Math.min(4, fret - minFret + 1)));
 }
 
-function buildVoicing(root, quality, zone, shape) {
+function buildVoicing(chordSymbol, zone) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return null;
+
+  const { root, quality } = parsed;
+  const shape = chooseShape(quality, root);
   const rootFret = findRootFret(root, shape.rootString, zone);
   const rootIndex = noteToIndex(root);
   const qualityInfo = CHORD_QUALITIES[quality];
   const degreeByInterval = {};
+
   qualityInfo.semitones.forEach((semi, idx) => {
     degreeByInterval[((semi % 12) + 12) % 12] = qualityInfo.formula[idx];
   });
@@ -297,6 +320,7 @@ function buildVoicing(root, quality, zone, shape) {
   });
 
   return {
+    chord: chordSymbol,
     name: shape.name,
     frets,
     tones,
@@ -376,127 +400,119 @@ function renderDiagram(voicing) {
     layers += `<text x="${fretLabelX}" y="${bottomY + 28}" text-anchor="middle" font-size="14" font-family="IBM Plex Mono">${baseFret + i}</text>`;
   }
 
-  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with left-side mute marks, bottom fret numbers, and right-side fingerings">${layers}</svg>`;
+  return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with left mute/open marks, bottom frets, low E on bottom, and right-hand fingering numbers">${layers}</svg>`;
 }
 
-function updateChordBuilder() {
-  const root = rootSelect.value;
-  const quality = qualitySelect.value;
-  const data = CHORD_QUALITIES[quality];
-  formulaLine.textContent = `${root}${data.symbol}: ${data.formula.join(" - ")}`;
-  const notes = data.semitones.map((semitone) => transpose(root, semitone));
-  notesLine.textContent = `Chord tones: ${notes.join("  ")}`;
-}
-
-function updateVoicings() {
-  const root = rootSelect.value;
-  const quality = qualitySelect.value;
-  const zone = zoneSelect.value;
-  const shapes = SHAPES[quality] || SHAPES.maj7;
-  const symbol = CHORD_QUALITIES[quality].symbol;
-
-  voicingCards.innerHTML = shapes
-    .map((shape) => buildVoicing(root, quality, zone, shape))
-    .map((voicing) => {
-      return `<article class="voicing-card">
-        <strong>${root}${symbol}</strong> - ${voicing.name}<br/>
-        <small>Strings 6->1: ${voicing.frets.join(" ")}</small><br/>
-        <small class="finger-line">Fingers 6->1: ${voicing.resolvedFingers.join(" ")}</small>
-        ${renderDiagram(voicing)}
-      </article>`;
-    })
-    .join("");
-}
-
-function buildIIVI(key) {
-  return [`${transpose(key, 2)}m7`, `${transpose(key, 7)}7`, `${key}maj7`, `${key}maj7`];
-}
-
-function buildTurnaround(key) {
-  return [`${key}maj7`, `${transpose(key, 9)}m7`, `${transpose(key, 2)}m7`, `${transpose(key, 7)}7`];
-}
-
-function buildMinorIIVI(key) {
-  return [`${transpose(key, 2)}m7b5`, `${transpose(key, 7)}7`, `${key}m7`, `${key}m7`];
-}
-
-function randomProgression(key) {
-  const choices = [
-    {
-      name: "Major ii-V-I",
-      bars: buildIIVI(key),
-      focus: "Keep the top voice moving by step where possible.",
-    },
-    {
-      name: "Turnaround I-vi-ii-V",
-      bars: buildTurnaround(key),
-      focus: "Comp lightly on beats 2 and 4 for swing feel.",
-    },
-    {
-      name: "Minor ii-V-i",
-      bars: buildMinorIIVI(key),
-      focus: "Highlight minor color with b3 and b5 clarity.",
-    },
-  ];
-
-  return choices[Math.floor(Math.random() * choices.length)];
-}
-
-function updateProgression() {
-  const key = keySelect.value;
-  const progression = randomProgression(key);
-  progressionOut.innerHTML = `
-    <div class="bar"><strong>${progression.name} in ${key}</strong></div>
-    ${progression.bars.map((chord, idx) => `<div class="bar">Bar ${idx + 1}: <strong>${chord}</strong></div>`).join("")}
-    <div class="bar good">Fluency target: ${progression.focus}</div>
+function renderSchematicBlock() {
+  const sample = buildVoicing("Cmaj7", "mid");
+  return `
+    <section class="lesson-block schematic-block">
+      <h3>Fingering Schematic (always use this map)</h3>
+      <p>
+        Left side = <strong>x/o</strong> (mute/open). Bottom = fret numbers. Bottom thick line = low E string.
+        Right side = left-hand fingering (1-4) aligned to each string.
+      </p>
+      <div class="schematic-wrap">${renderDiagram(sample)}</div>
+    </section>
   `;
 }
 
-function initRoadmap() {
-  const saved = JSON.parse(localStorage.getItem("jazzLessonChecks") || "{}");
-  lessonList.innerHTML = LESSONS.map((lesson, idx) => {
-    const id = `lesson-${idx}`;
-    return `<li class="lesson-row">
-      <div><strong>${lesson.title}</strong><small>${lesson.detail}</small></div>
-      <input type="checkbox" id="${id}" ${saved[id] ? "checked" : ""} />
-    </li>`;
-  }).join("");
-
-  LESSONS.forEach((_, idx) => {
-    const id = `lesson-${idx}`;
-    const checkbox = document.getElementById(id);
-    checkbox.addEventListener("change", (event) => {
-      const state = JSON.parse(localStorage.getItem("jazzLessonChecks") || "{}");
-      state[id] = event.target.checked;
-      localStorage.setItem("jazzLessonChecks", JSON.stringify(state));
-    });
+function uniqueChordsInOrder(bars) {
+  const seen = new Set();
+  const ordered = [];
+  bars.forEach((bar) => {
+    if (!seen.has(bar)) {
+      seen.add(bar);
+      ordered.push(bar);
+    }
   });
+  return ordered;
 }
 
-function fillSelects() {
-  rootSelect.innerHTML = NOTES.map((note) => `<option value="${note}">${note}</option>`).join("");
-  keySelect.innerHTML = NOTES.map((note) => `<option value="${note}">${note}</option>`).join("");
-  qualitySelect.innerHTML = Object.entries(CHORD_QUALITIES)
-    .map(([value, quality]) => `<option value="${value}">${quality.name}</option>`)
+function renderProgressionModule(module) {
+  const data = PROGRESSION_DATA[module.id];
+  const bars = data.bars;
+  const uniqueChords = uniqueChordsInOrder(bars);
+
+  const barsMarkup = bars
+    .map((chord, idx) => `<div class="bar-item">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
     .join("");
 
-  rootSelect.value = "C";
-  keySelect.value = "C";
-  qualitySelect.value = "maj7";
+  const diagramsMarkup = uniqueChords
+    .map((chord) => {
+      const voicing = buildVoicing(chord, data.zone);
+      if (!voicing) return "";
+      return `
+        <article class="chord-card">
+          <h4>${chord}</h4>
+          <p class="mini">${voicing.name}</p>
+          <p class="mini">Strings 6->1: ${voicing.frets.join(" ")}</p>
+          <p class="mini">Fingers 6->1: ${voicing.resolvedFingers.join(" ")}</p>
+          ${renderDiagram(voicing)}
+        </article>
+      `;
+    })
+    .join("");
+
+  return `
+    ${renderSchematicBlock()}
+    <section class="lesson-block">
+      <h3>Progression: ${module.title}</h3>
+      <p><strong>Key:</strong> ${data.keyLabel} <span class="chip">Suggested neck zone: ${data.zone}</span></p>
+      <div class="bar-grid">${barsMarkup}</div>
+      <p><strong>Focus:</strong> ${data.focus}</p>
+      <p><strong>Practice groove:</strong> ${data.groove}</p>
+    </section>
+
+    <section class="lesson-block">
+      <h3>Chord Fingerings For This Progression</h3>
+      <div class="diagram-grid">${diagramsMarkup}</div>
+    </section>
+  `;
+}
+
+function renderSongsModule() {
+  const songsMarkup = SONG_SUGGESTIONS.map(
+    (song) => `<li><strong>${song.title}</strong> - ${song.use}</li>`
+  ).join("");
+
+  return `
+    ${renderSchematicBlock()}
+    <section class="lesson-block">
+      <h3>Now Play Real Songs</h3>
+      <p>
+        Use your 5 progression modules as your toolkit. Start with slow backing tracks, comp cleanly,
+        and keep time more than adding extra chords.
+      </p>
+      <ol class="song-list">${songsMarkup}</ol>
+      <p><strong>Next move:</strong> Pick one song and comp only the core progression for the full form.</p>
+    </section>
+  `;
+}
+
+function renderLesson() {
+  const module = MODULES.find((item) => item.id === activeModuleId) || MODULES[0];
+  if (module.kind === "songs") {
+    lessonContent.innerHTML = renderSongsModule();
+    return;
+  }
+
+  lessonContent.innerHTML = renderProgressionModule(module);
 }
 
 function renderModuleNav() {
   moduleNav.innerHTML = MODULES.map((module, idx) => {
-    return `<li>
-      <button type="button" data-module-id="${module.id}">
-        <strong>${idx + 1}. ${module.title}</strong>
-        <small>${module.blurb}</small>
-      </button>
-    </li>`;
+    return `
+      <li>
+        <button type="button" data-module-id="${module.id}">
+          <strong>${idx + 1}. ${module.title}</strong>
+          <small>${module.blurb}</small>
+        </button>
+      </li>
+    `;
   }).join("");
 
-  const buttons = moduleNav.querySelectorAll("button");
-  buttons.forEach((button) => {
+  moduleNav.querySelectorAll("button").forEach((button) => {
     button.addEventListener("click", () => {
       setActiveModule(button.dataset.moduleId);
     });
@@ -504,55 +520,38 @@ function renderModuleNav() {
 }
 
 function setActiveModule(moduleId) {
-  const index = MODULES.findIndex((module) => module.id === moduleId);
+  const index = MODULES.findIndex((item) => item.id === moduleId);
   const safeIndex = index >= 0 ? index : 0;
-  const activeModule = MODULES[safeIndex];
+  const module = MODULES[safeIndex];
 
-  activeModuleId = activeModule.id;
+  activeModuleId = module.id;
   localStorage.setItem("activeJazzModule", activeModuleId);
 
-  stageModuleLabel.textContent = `${activeModule.step} of ${MODULES.length}`;
-  stageTitle.textContent = activeModule.title;
-
-  lessonViews.forEach((view) => {
-    view.hidden = view.dataset.module !== activeModuleId;
-  });
+  stageModuleLabel.textContent = `${module.step} of ${MODULES.length}`;
+  stageTitle.textContent = module.title;
 
   moduleNav.querySelectorAll("button").forEach((button) => {
-    const selected = button.dataset.moduleId === activeModuleId;
+    const selected = button.dataset.moduleId === module.id;
     button.classList.toggle("active", selected);
     button.setAttribute("aria-current", selected ? "page" : "false");
   });
 
   prevModuleBtn.disabled = safeIndex === 0;
   nextModuleBtn.disabled = safeIndex === MODULES.length - 1;
+
+  renderLesson();
 }
 
 function stepModule(direction) {
-  const currentIndex = MODULES.findIndex((module) => module.id === activeModuleId);
+  const currentIndex = MODULES.findIndex((item) => item.id === activeModuleId);
   const nextIndex = currentIndex + direction;
   if (nextIndex >= 0 && nextIndex < MODULES.length) {
     setActiveModule(MODULES[nextIndex].id);
   }
 }
 
-fillSelects();
-initRoadmap();
 renderModuleNav();
 setActiveModule(activeModuleId);
-updateChordBuilder();
-updateVoicings();
-updateProgression();
 
-[rootSelect, qualitySelect].forEach((element) => {
-  element.addEventListener("change", () => {
-    updateChordBuilder();
-    updateVoicings();
-  });
-});
-
-zoneSelect.addEventListener("change", updateVoicings);
-keySelect.addEventListener("change", updateProgression);
-newProgressionBtn.addEventListener("click", updateProgression);
 prevModuleBtn.addEventListener("click", () => stepModule(-1));
 nextModuleBtn.addEventListener("click", () => stepModule(1));
