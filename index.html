@@ -11,102 +11,125 @@
   </head>
   <body>
     <div class="bg-grid" aria-hidden="true"></div>
-    <header class="hero">
-      <p class="eyebrow">Jazz Guitar Fluency Coach</p>
-      <h1>From first jazz chord to gig-ready progressions</h1>
-      <p class="subhead">
-        Build chords by understanding intervals, map voicings up and down the neck,
-        and train ii-V-I fluency so you can sound musical fast.
-      </p>
-    </header>
 
-    <main class="layout">
-      <section class="card lessons">
-        <h2>Step-by-Step Roadmap</h2>
-        <ol id="lessonList"></ol>
-      </section>
+    <main class="app-shell">
+      <aside class="sidebar">
+        <p class="eyebrow">Jazz Guitar Fluency Coach</p>
+        <h1>Beginner to Intermediate Jazz Guitar</h1>
+        <p class="sidebar-intro">Follow modules in order. One lesson at a time on the right.</p>
+        <nav>
+          <ul id="moduleNav" class="module-nav"></ul>
+        </nav>
+        <p class="sidebar-tip">Daily target: 20 focused minutes with a metronome.</p>
+      </aside>
 
-      <section class="card builder">
-        <h2>1) Build Chords, Don’t Memorize</h2>
-        <div class="controls">
-          <label>
-            Root
-            <select id="rootSelect"></select>
-          </label>
-          <label>
-            Chord Quality
-            <select id="qualitySelect"></select>
-          </label>
-        </div>
-        <p id="formulaLine"></p>
-        <p id="notesLine"></p>
-      </section>
+      <section class="lesson-stage">
+        <header class="stage-header">
+          <div>
+            <p id="stageModuleLabel" class="module-label"></p>
+            <h2 id="stageTitle"></h2>
+          </div>
+          <div class="stage-actions">
+            <button id="prevModuleBtn" type="button">Previous</button>
+            <button id="nextModuleBtn" type="button">Next</button>
+          </div>
+        </header>
 
-      <section class="card voicing-panel">
-        <h2>2) Voicings Across The Neck</h2>
-        <div class="controls">
-          <label>
-            Neck Zone
-            <select id="zoneSelect">
-              <option value="low">Low (frets 1-5)</option>
-              <option value="mid" selected>Middle (frets 5-9)</option>
-              <option value="high">High (frets 9-13)</option>
-            </select>
-          </label>
-        </div>
-        <p class="hint">Tip: Play each voicing as whole notes, then comp in quarter notes with a metronome.</p>
-        <div id="voicingCards" class="voicing-cards"></div>
-      </section>
+        <section class="lesson-view" data-module="welcome">
+          <h3>How this tutorial works</h3>
+          <p>
+            You already play acoustic guitar, so this course skips basics and focuses on jazz fluency:
+            interval thinking, functional harmony, and voice leading.
+          </p>
+          <ul class="bullet-list">
+            <li>Learn chord formulas, then build any chord in any key.</li>
+            <li>Practice the same harmony in low, mid, and high neck zones.</li>
+            <li>Train progressions so your comping sounds musical, not random.</li>
+          </ul>
+          <h4>Chord Diagram Schematic</h4>
+          <p>Read diagrams left-to-right as strings 6 to 1. `x` = mute, `o` = open, `●` = fretted note.</p>
+          <svg viewBox="0 0 360 230" role="img" aria-label="Chord diagram schematic">
+            <rect x="30" y="20" width="300" height="180" fill="none" stroke="currentColor" stroke-width="2" />
+            <line x1="80" y1="20" x2="80" y2="200" stroke="currentColor" />
+            <line x1="130" y1="20" x2="130" y2="200" stroke="currentColor" />
+            <line x1="180" y1="20" x2="180" y2="200" stroke="currentColor" />
+            <line x1="230" y1="20" x2="230" y2="200" stroke="currentColor" />
+            <line x1="280" y1="20" x2="280" y2="200" stroke="currentColor" />
+            <line x1="30" y1="60" x2="330" y2="60" stroke="currentColor" />
+            <line x1="30" y1="100" x2="330" y2="100" stroke="currentColor" />
+            <line x1="30" y1="140" x2="330" y2="140" stroke="currentColor" />
+            <line x1="30" y1="180" x2="330" y2="180" stroke="currentColor" />
+            <circle cx="80" cy="60" r="10" fill="currentColor" />
+            <circle cx="180" cy="100" r="10" fill="currentColor" />
+            <circle cx="230" cy="140" r="10" fill="currentColor" />
+            <text x="52" y="14" font-size="16">x</text>
+            <text x="95" y="14" font-size="16">x</text>
+            <text x="145" y="14" font-size="16">●</text>
+            <text x="195" y="14" font-size="16">●</text>
+            <text x="245" y="14" font-size="16">●</text>
+            <text x="295" y="14" font-size="16">x</text>
+            <text x="12" y="45" font-size="14">Fret 1</text>
+            <text x="12" y="85" font-size="14">Fret 2</text>
+            <text x="12" y="125" font-size="14">Fret 3</text>
+            <text x="12" y="165" font-size="14">Fret 4</text>
+          </svg>
+        </section>
 
-      <section class="card progression">
-        <h2>3) Jazz Progression Trainer</h2>
-        <div class="controls">
-          <label>
-            Key Center
-            <select id="keySelect"></select>
-          </label>
-          <button id="newProgressionBtn" type="button">New Practice Progression</button>
-        </div>
-        <div id="progressionOut" class="progression-out"></div>
-      </section>
+        <section class="lesson-view" data-module="builder" hidden>
+          <h3>Build Chords by Formula</h3>
+          <p class="module-copy">Pick a root and chord quality. Learn why each chord works from intervals.</p>
+          <div class="controls">
+            <label>
+              Root
+              <select id="rootSelect"></select>
+            </label>
+            <label>
+              Chord Quality
+              <select id="qualitySelect"></select>
+            </label>
+          </div>
+          <p id="formulaLine" class="formula-line"></p>
+          <p id="notesLine" class="notes-line"></p>
+          <p class="practice-task">Practice task: Build the same quality from 3 different roots before moving on.</p>
+        </section>
 
-      <section class="card schematic">
-        <h2>Chord Diagram Schematic</h2>
-        <p>This visual shows how the app diagrams strings, frets, muted strings (`x`), and fingered notes (`●`).</p>
-        <svg viewBox="0 0 360 230" role="img" aria-label="Chord diagram schematic">
-          <rect x="30" y="20" width="300" height="180" fill="none" stroke="currentColor" stroke-width="2" />
-          <line x1="80" y1="20" x2="80" y2="200" stroke="currentColor" />
-          <line x1="130" y1="20" x2="130" y2="200" stroke="currentColor" />
-          <line x1="180" y1="20" x2="180" y2="200" stroke="currentColor" />
-          <line x1="230" y1="20" x2="230" y2="200" stroke="currentColor" />
-          <line x1="280" y1="20" x2="280" y2="200" stroke="currentColor" />
-          <line x1="30" y1="60" x2="330" y2="60" stroke="currentColor" />
-          <line x1="30" y1="100" x2="330" y2="100" stroke="currentColor" />
-          <line x1="30" y1="140" x2="330" y2="140" stroke="currentColor" />
-          <line x1="30" y1="180" x2="330" y2="180" stroke="currentColor" />
-          <circle cx="80" cy="60" r="10" fill="currentColor" />
-          <circle cx="180" cy="100" r="10" fill="currentColor" />
-          <circle cx="230" cy="140" r="10" fill="currentColor" />
-          <text x="52" y="14" font-size="16">x</text>
-          <text x="95" y="14" font-size="16">x</text>
-          <text x="145" y="14" font-size="16">●</text>
-          <text x="195" y="14" font-size="16">●</text>
-          <text x="245" y="14" font-size="16">●</text>
-          <text x="295" y="14" font-size="16">x</text>
-          <text x="12" y="45" font-size="14">Fret 1</text>
-          <text x="12" y="85" font-size="14">Fret 2</text>
-          <text x="12" y="125" font-size="14">Fret 3</text>
-          <text x="12" y="165" font-size="14">Fret 4</text>
-        </svg>
+        <section class="lesson-view" data-module="voicings" hidden>
+          <h3>Map Voicings Up and Down the Neck</h3>
+          <p class="module-copy">Use one chord quality and move between neck zones without losing groove.</p>
+          <div class="controls">
+            <label>
+              Neck Zone
+              <select id="zoneSelect">
+                <option value="low">Low (frets 1-5)</option>
+                <option value="mid" selected>Middle (frets 5-9)</option>
+                <option value="high">High (frets 9-13)</option>
+              </select>
+            </label>
+          </div>
+          <p class="practice-task">Practice task: Start in low zone, then shift to mid, then high with the same chord quality.</p>
+          <div id="voicingCards" class="voicing-cards"></div>
+        </section>
+
+        <section class="lesson-view" data-module="progressions" hidden>
+          <h3>Comp Through Common Jazz Progressions</h3>
+          <p class="module-copy">Generate progressions and focus on smooth voice leading over speed.</p>
+          <div class="controls">
+            <label>
+              Key Center
+              <select id="keySelect"></select>
+            </label>
+            <button id="newProgressionBtn" type="button">New Practice Progression</button>
+          </div>
+          <div id="progressionOut" class="progression-out"></div>
+        </section>
+
+        <section class="lesson-view" data-module="roadmap" hidden>
+          <h3>Weekly Roadmap to Intermediate Fluency</h3>
+          <p class="module-copy">Track progress and unlock real-world comping confidence.</p>
+          <ol id="lessonList" class="roadmap-list"></ol>
+        </section>
       </section>
     </main>
-
-    <footer>
-      <p>
-        Practice goal: 20 minutes/day. Comp slowly, connect nearest voicing on every chord change,
-        and aim for smooth voice leading before speed.
-      </p>
-    </footer>
 
     <script src="app.js"></script>
   </body>
