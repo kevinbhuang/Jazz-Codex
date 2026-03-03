@@ -292,3 +292,41 @@ button {
     transform: translateY(0);
   }
 }
+
+.practice-player {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 0.65rem;
+  background: color-mix(in oklab, var(--accent-3), white 45%);
+  margin: 0.8rem 0;
+}
+
+.tempo-input {
+  width: 110px;
+  margin-left: 0.4rem;
+}
+
+.player-controls {
+  margin-top: 0.55rem;
+  display: flex;
+  gap: 0.45rem;
+  flex-wrap: wrap;
+}
+
+.start-track-btn {
+  background: var(--accent-2);
+  color: white;
+  border-color: transparent;
+}
+
+.track-status {
+  margin: 0.55rem 0 0;
+  font-family: "IBM Plex Mono", monospace;
+  color: #213741;
+}
+
+.bar-item.active-bar {
+  background: color-mix(in oklab, #fef6dc, white 45%);
+  border-color: var(--accent);
+  box-shadow: inset 4px 0 0 var(--accent);
+}

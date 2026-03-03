@@ -229,6 +229,21 @@ const nextModuleBtn = document.getElementById("nextModuleBtn");
 const lessonContent = document.getElementById("lessonContent");
 
 let activeModuleId = localStorage.getItem("activeJazzModule") || MODULES[0].id;
+const backingTrackState = {
+  audioCtx: null,
+  isPlaying: false,
+  moduleId: null,
+  bars: [],
+  tempo: 80,
+  nextNoteTime: 0,
+  step: 0,
+  timerId: null,
+  statusEl: null,
+  startBtn: null,
+  stopBtn: null,
+  barEls: [],
+  uiTimers: [],
+};
 
 function noteToIndex(note) {
   return NOTES.indexOf(note);
@@ -403,6 +418,163 @@ function renderDiagram(voicing) {
   return `<svg class="diagram" viewBox="0 0 ${width} ${height}" role="img" aria-label="Chord diagram with left mute/open marks, bottom frets, low E on bottom, and right-hand fingering numbers">${layers}</svg>`;
 }
 
+function clampTempo(value) {
+  if (!Number.isFinite(value)) return 80;
+  return Math.max(50, Math.min(220, Math.round(value)));
+}
+
+function parseChordRoot(chordSymbol) {
+  const match = chordSymbol.match(/^([A-G](?:#|b)?)/);
+  return match ? match[1] : null;
+}
+
+function noteFrequency(note, octave) {
+  const index = noteToIndex(note);
+  if (index < 0) return null;
+  const midi = (octave + 1) * 12 + index;
+  return 440 * Math.pow(2, (midi - 69) / 12);
+}
+
+function scheduleClick(time, beatInBar) {
+  const ctx = backingTrackState.audioCtx;
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+  const accent = beatInBar === 2 || beatInBar === 4;
+
+  osc.type = "triangle";
+  osc.frequency.setValueAtTime(accent ? 1900 : 1300, time);
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(accent ? 0.13 : 0.08, time + 0.002);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.055);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.06);
+}
+
+function scheduleBass(time, chordSymbol, beatInBar) {
+  if (beatInBar !== 1 && beatInBar !== 3) return;
+  const ctx = backingTrackState.audioCtx;
+  const root = parseChordRoot(chordSymbol);
+  const frequency = noteFrequency(root, 2);
+  if (!frequency) return;
+
+  const osc = ctx.createOscillator();
+  const gain = ctx.createGain();
+
+  osc.type = "sawtooth";
+  osc.frequency.setValueAtTime(frequency, time);
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(0.11, time + 0.012);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.24);
+
+  osc.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.26);
+}
+
+function clearBarHighlights() {
+  backingTrackState.barEls.forEach((bar) => bar.classList.remove("active-bar"));
+}
+
+function clearUiTimers() {
+  while (backingTrackState.uiTimers.length) {
+    clearTimeout(backingTrackState.uiTimers.pop());
+  }
+}
+
+function updatePlaybackUi(barIndex, beatInBar) {
+  const { barEls, statusEl, bars } = backingTrackState;
+  if (!statusEl) return;
+
+  clearBarHighlights();
+  if (barEls[barIndex]) {
+    barEls[barIndex].classList.add("active-bar");
+  }
+
+  statusEl.textContent = `Playing bar ${barIndex + 1}/${bars.length} (${bars[barIndex]}) - beat ${beatInBar}`;
+}
+
+function queuePlaybackUi(barIndex, beatInBar, atTime) {
+  const delayMs = Math.max(0, (atTime - backingTrackState.audioCtx.currentTime) * 1000);
+  const timer = setTimeout(() => {
+    updatePlaybackUi(barIndex, beatInBar);
+  }, delayMs);
+  backingTrackState.uiTimers.push(timer);
+}
+
+function scheduleBeat() {
+  const barIndex = Math.floor(backingTrackState.step / 4) % backingTrackState.bars.length;
+  const beatInBar = (backingTrackState.step % 4) + 1;
+  const chord = backingTrackState.bars[barIndex];
+  const time = backingTrackState.nextNoteTime;
+
+  scheduleClick(time, beatInBar);
+  scheduleBass(time, chord, beatInBar);
+  queuePlaybackUi(barIndex, beatInBar, time);
+
+  backingTrackState.nextNoteTime += 60 / backingTrackState.tempo;
+  backingTrackState.step += 1;
+}
+
+function schedulerLoop() {
+  const lookAhead = 0.12;
+  while (backingTrackState.nextNoteTime < backingTrackState.audioCtx.currentTime + lookAhead) {
+    scheduleBeat();
+  }
+}
+
+function stopBackingTrack() {
+  if (backingTrackState.timerId) {
+    clearInterval(backingTrackState.timerId);
+    backingTrackState.timerId = null;
+  }
+
+  backingTrackState.isPlaying = false;
+  clearUiTimers();
+  clearBarHighlights();
+
+  if (backingTrackState.statusEl) {
+    backingTrackState.statusEl.textContent = "Stopped";
+  }
+  if (backingTrackState.startBtn) {
+    backingTrackState.startBtn.disabled = false;
+  }
+  if (backingTrackState.stopBtn) {
+    backingTrackState.stopBtn.disabled = true;
+  }
+}
+
+async function startBackingTrack(moduleId, bars, tempo, statusEl, startBtn, stopBtn, barEls) {
+  if (backingTrackState.isPlaying) {
+    stopBackingTrack();
+  }
+
+  if (!backingTrackState.audioCtx) {
+    backingTrackState.audioCtx = new window.AudioContext();
+  }
+  await backingTrackState.audioCtx.resume();
+
+  backingTrackState.moduleId = moduleId;
+  backingTrackState.bars = bars;
+  backingTrackState.tempo = tempo;
+  backingTrackState.step = 0;
+  backingTrackState.nextNoteTime = backingTrackState.audioCtx.currentTime + 0.05;
+  backingTrackState.statusEl = statusEl;
+  backingTrackState.startBtn = startBtn;
+  backingTrackState.stopBtn = stopBtn;
+  backingTrackState.barEls = barEls;
+  backingTrackState.isPlaying = true;
+
+  startBtn.disabled = true;
+  stopBtn.disabled = false;
+  statusEl.textContent = `Starting at ${tempo} BPM...`;
+
+  backingTrackState.timerId = setInterval(schedulerLoop, 25);
+}
+
 function renderSchematicBlock() {
   const sample = buildVoicing("Cmaj7", "mid");
   return `
@@ -433,9 +605,13 @@ function renderProgressionModule(module) {
   const data = PROGRESSION_DATA[module.id];
   const bars = data.bars;
   const uniqueChords = uniqueChordsInOrder(bars);
+  const tempoDefault = 80;
 
   const barsMarkup = bars
-    .map((chord, idx) => `<div class="bar-item">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
+    .map(
+      (chord, idx) =>
+        `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`
+    )
     .join("");
 
   const diagramsMarkup = uniqueChords
@@ -459,6 +635,17 @@ function renderProgressionModule(module) {
     <section class="lesson-block">
       <h3>Progression: ${module.title}</h3>
       <p><strong>Key:</strong> ${data.keyLabel} <span class="chip">Suggested neck zone: ${data.zone}</span></p>
+      <div class="practice-player">
+        <label>
+          Tempo (BPM)
+          <input id="tempoInput-${module.id}" class="tempo-input" type="number" min="50" max="220" value="${tempoDefault}" />
+        </label>
+        <div class="player-controls">
+          <button id="startTrackBtn-${module.id}" class="start-track-btn" type="button">Start Backing Track</button>
+          <button id="stopTrackBtn-${module.id}" class="stop-track-btn" type="button" disabled>Stop</button>
+        </div>
+        <p id="trackStatus-${module.id}" class="track-status">Stopped</p>
+      </div>
       <div class="bar-grid">${barsMarkup}</div>
       <p><strong>Focus:</strong> ${data.focus}</p>
       <p><strong>Practice groove:</strong> ${data.groove}</p>
@@ -469,6 +656,36 @@ function renderProgressionModule(module) {
       <div class="diagram-grid">${diagramsMarkup}</div>
     </section>
   `;
+}
+
+function wirePracticePlayer(module, data) {
+  const tempoInput = document.getElementById(`tempoInput-${module.id}`);
+  const startBtn = document.getElementById(`startTrackBtn-${module.id}`);
+  const stopBtn = document.getElementById(`stopTrackBtn-${module.id}`);
+  const statusEl = document.getElementById(`trackStatus-${module.id}`);
+  const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
+
+  if (!tempoInput || !startBtn || !stopBtn || !statusEl) return;
+
+  startBtn.addEventListener("click", async () => {
+    const tempo = clampTempo(Number(tempoInput.value));
+    tempoInput.value = String(tempo);
+    await startBackingTrack(module.id, data.bars, tempo, statusEl, startBtn, stopBtn, barEls);
+  });
+
+  stopBtn.addEventListener("click", () => {
+    stopBackingTrack();
+  });
+
+  tempoInput.addEventListener("change", () => {
+    const tempo = clampTempo(Number(tempoInput.value));
+    tempoInput.value = String(tempo);
+
+    if (backingTrackState.isPlaying && backingTrackState.moduleId === module.id) {
+      backingTrackState.tempo = tempo;
+      statusEl.textContent = `Tempo changed to ${tempo} BPM`;
+    }
+  });
 }
 
 function renderSongsModule() {
@@ -498,6 +715,7 @@ function renderLesson() {
   }
 
   lessonContent.innerHTML = renderProgressionModule(module);
+  wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
 }
 
 function renderModuleNav() {
@@ -520,6 +738,8 @@ function renderModuleNav() {
 }
 
 function setActiveModule(moduleId) {
+  stopBackingTrack();
+
   const index = MODULES.findIndex((item) => item.id === moduleId);
   const safeIndex = index >= 0 ? index : 0;
   const module = MODULES[safeIndex];
