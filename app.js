@@ -60,12 +60,6 @@ const MODULES = [
     title: "Top 5 Jazz Scales",
     blurb: "Map scales directly to chord qualities in real progressions.",
   },
-  {
-    id: "play_along_loop",
-    kind: "playalong",
-    title: "Play-Along Loop",
-    blurb: "Simple drum + bass loop with adjustable tempo.",
-  },
 ];
 
 const ROOT_NOTE_OPTIONS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -1620,6 +1614,46 @@ function renderScaleModule() {
       <div class="bar-grid">${applyMarkup}</div>
       <div class="diagram-grid tutorial-grid apply-scale-grid">${applyScaleDiagrams}</div>
     </section>
+
+    <section class="lesson-block">
+      <h3>Play-Along Loop</h3>
+      <p>Simple drum + bass groove so you can comp or solo over this progression.</p>
+      <div class="practice-player">
+        <label>
+          Progression
+          <select id="playAlongProgressionSelect" class="tempo-input">
+            ${PROGRESSION_MODULES.map(
+              (item) => `<option value="${item.id}" ${item.id === playAlongState.progressionId ? "selected" : ""}>${item.title}</option>`
+            ).join("")}
+          </select>
+        </label>
+        <div class="transpose-chip-wrap">
+          <span>Key</span>
+          <div class="transpose-chip-group" role="radiogroup" aria-label="Play-along key">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="transpose-choice ${playAlongState.key === note ? "active" : ""}" data-playalong-key-option="${note}" aria-pressed="${playAlongState.key === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
+        <label>
+          Tempo (BPM)
+          <input id="playAlongTempoInput" class="tempo-input" type="number" min="50" max="220" value="${playAlongState.tempo}" />
+        </label>
+        <div class="player-controls">
+          <button id="startPlayAlongBtn" class="start-track-btn" type="button">Start Play-Along Loop</button>
+          <button id="stopPlayAlongBtn" class="stop-track-btn" type="button" disabled>Stop</button>
+        </div>
+        <p id="playAlongStatus" class="track-status">Stopped</p>
+      </div>
+      <div id="playAlongBarGrid" class="bar-grid">${transposeBarsFromTonic(
+        (PROGRESSION_DATA[playAlongState.progressionId] || PROGRESSION_DATA.major_iivi).bars,
+        (PROGRESSION_DATA[playAlongState.progressionId] || PROGRESSION_DATA.major_iivi).tonic || "C",
+        playAlongState.key
+      )
+        .map((chord, idx) => `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
+        .join("")}</div>
+    </section>
   `;
 }
 
@@ -1665,51 +1699,8 @@ function wireScaleModule() {
       await playScaleOverChordPreview(scaleModuleState.root, scaleModuleState.scaleId);
     });
   }
-}
 
-function renderPlayAlongModule() {
-  const module = PROGRESSION_MODULES.find((item) => item.id === playAlongState.progressionId) || PROGRESSION_MODULES[0];
-  const data = PROGRESSION_DATA[module.id];
-  const bars = transposeBarsFromTonic(data.bars, data.tonic || "C", playAlongState.key);
-  const barsMarkup = bars
-    .map((chord, idx) => `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
-    .join("");
-
-  return `
-    <section class="lesson-block">
-      <h3>Step 4: Play-Along Loop</h3>
-      <p>Simple drum + bass groove so you can comp or solo over real harmonic motion.</p>
-      <div class="practice-player">
-        <label>
-          Progression
-          <select id="playAlongProgressionSelect" class="tempo-input">
-            ${PROGRESSION_MODULES.map(
-              (item) => `<option value="${item.id}" ${item.id === module.id ? "selected" : ""}>${item.title}</option>`
-            ).join("")}
-          </select>
-        </label>
-        <div class="transpose-chip-wrap">
-          <span>Key</span>
-          <div class="transpose-chip-group" role="radiogroup" aria-label="Play-along key">
-            ${ROOT_NOTE_OPTIONS.map(
-              (note) =>
-                `<button type="button" class="transpose-choice ${playAlongState.key === note ? "active" : ""}" data-playalong-key-option="${note}" aria-pressed="${playAlongState.key === note ? "true" : "false"}">${note}</button>`
-            ).join("")}
-          </div>
-        </div>
-        <label>
-          Tempo (BPM)
-          <input id="playAlongTempoInput" class="tempo-input" type="number" min="50" max="220" value="${playAlongState.tempo}" />
-        </label>
-        <div class="player-controls">
-          <button id="startPlayAlongBtn" class="start-track-btn" type="button">Start Play-Along Loop</button>
-          <button id="stopPlayAlongBtn" class="stop-track-btn" type="button" disabled>Stop</button>
-        </div>
-        <p id="playAlongStatus" class="track-status">Stopped</p>
-      </div>
-      <div class="bar-grid">${barsMarkup}</div>
-    </section>
-  `;
+  wirePlayAlongModule();
 }
 
 function wirePlayAlongModule() {
@@ -1718,7 +1709,7 @@ function wirePlayAlongModule() {
   const startBtn = document.getElementById("startPlayAlongBtn");
   const stopBtn = document.getElementById("stopPlayAlongBtn");
   const statusEl = document.getElementById("playAlongStatus");
-  const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
+  const barEls = Array.from(lessonContent.querySelectorAll("#playAlongBarGrid .bar-item"));
   const keyButtons = lessonContent.querySelectorAll("[data-playalong-key-option]");
 
   if (!progressionSelect || !tempoInput || !startBtn || !stopBtn || !statusEl) return;
@@ -1901,12 +1892,6 @@ function renderLesson() {
     return;
   }
 
-  if (module.kind === "playalong") {
-    lessonContent.innerHTML = renderPlayAlongModule();
-    wirePlayAlongModule();
-    return;
-  }
-
   lessonContent.innerHTML = renderProgressionModule(module);
   wireChordPreviewButtons();
   wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
@@ -1916,7 +1901,6 @@ function renderModuleNav() {
   const step1Module = MODULES.find((module) => module.kind === "tutorial");
   const step2Modules = PROGRESSION_MODULES;
   const step3Module = MODULES.find((module) => module.kind === "scales");
-  const step4Module = MODULES.find((module) => module.kind === "playalong");
 
   const step2Markup = step2Modules
     .map((module, idx) => {
@@ -1948,13 +1932,6 @@ function renderModuleNav() {
         <small>${step3Module.blurb}</small>
       </button>
     </li>
-    <li class="nav-section">Step 4: Play-Along</li>
-    <li>
-      <button type="button" data-module-id="${step4Module.id}">
-        <strong>${step4Module.title}</strong>
-        <small>${step4Module.blurb}</small>
-      </button>
-    </li>
   `;
 
   moduleNav.querySelectorAll("button").forEach((button) => {
@@ -1975,17 +1952,14 @@ function setActiveModule(moduleId) {
   safeSetStoredModule(activeModuleId);
 
   if (module.kind === "tutorial") {
-    stageModuleLabel.textContent = "Step 1 of 4";
+    stageModuleLabel.textContent = "Step 1 of 3";
     stageTitle.textContent = module.title;
   } else if (module.kind === "progression") {
     const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
-    stageModuleLabel.textContent = `Step 2 of 4 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
-    stageTitle.textContent = module.title;
-  } else if (module.kind === "scales") {
-    stageModuleLabel.textContent = "Step 3 of 4 - Scales";
+    stageModuleLabel.textContent = `Step 2 of 3 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
     stageTitle.textContent = module.title;
   } else {
-    stageModuleLabel.textContent = "Step 4 of 4 - Play-Along";
+    stageModuleLabel.textContent = "Step 3 of 3 - Scales";
     stageTitle.textContent = module.title;
   }
 
