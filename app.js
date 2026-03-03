@@ -103,6 +103,7 @@ const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progress
 
 const PROGRESSION_DATA = {
   major_iivi: {
+    tonic: "C",
     keyLabel: "C major",
     zone: "low",
     bars: ["Dm7", "G7", "Cmaj7", "Cmaj7"],
@@ -117,6 +118,7 @@ const PROGRESSION_DATA = {
     ],
   },
   rhythm_changes_a: {
+    tonic: "C",
     keyLabel: "Rhythm Changes A",
     zone: "low",
     bars: ["Cmaj7", "Am7", "Dm7", "G7", "Em7", "A7", "Dm7", "G7"],
@@ -131,6 +133,7 @@ const PROGRESSION_DATA = {
     ],
   },
   descending_iivis: {
+    tonic: "C",
     keyLabel: "C -> Bb -> Ab",
     zone: "mid",
     bars: ["Cmaj7", "Cmaj7", "Cm7", "F7", "Bbmaj7", "Bbmaj7", "Bbm7", "Eb7", "Abmaj7", "Abmaj7", "Abm7", "Db7"],
@@ -145,6 +148,7 @@ const PROGRESSION_DATA = {
     ],
   },
   dim_passing: {
+    tonic: "C",
     keyLabel: "C major color movement",
     zone: "mid",
     bars: ["Cmaj7", "C#dim7", "Dm7", "D#dim7", "Em7", "A7"],
@@ -159,6 +163,7 @@ const PROGRESSION_DATA = {
     ],
   },
   a_train: {
+    tonic: "C",
     keyLabel: "C major with II7",
     zone: "low",
     bars: ["Cmaj7", "Cmaj7", "D7", "D7", "Dm7", "G7", "Cmaj7", "Cmaj7"],
@@ -173,6 +178,7 @@ const PROGRESSION_DATA = {
     ],
   },
   i_to_iv: {
+    tonic: "C",
     keyLabel: "C major to IV",
     zone: "low",
     bars: ["Cmaj7", "Gm7", "C7", "Fmaj7"],
@@ -187,6 +193,7 @@ const PROGRESSION_DATA = {
     ],
   },
   iv_to_ivm: {
+    tonic: "C",
     keyLabel: "Major to minor color shift",
     zone: "mid",
     bars: ["Cmaj7", "C7", "Fmaj7", "Fm7", "Em7", "A7", "Dm7", "G7", "Cmaj7", "Cmaj7"],
@@ -201,6 +208,7 @@ const PROGRESSION_DATA = {
     ],
   },
   rhythm_bridge: {
+    tonic: "C",
     keyLabel: "Cycle of dominants",
     zone: "mid",
     bars: ["D7", "G7", "C7", "F7"],
@@ -215,6 +223,7 @@ const PROGRESSION_DATA = {
     ],
   },
   minor_iivi: {
+    tonic: "C",
     keyLabel: "C minor",
     zone: "low",
     bars: ["Dm7b5", "G7", "Cm7", "Cm7"],
@@ -229,6 +238,7 @@ const PROGRESSION_DATA = {
     ],
   },
   stray_cat: {
+    tonic: "C",
     keyLabel: "Minor turnaround",
     zone: "mid",
     bars: ["Cm7", "Cm7/Bb", "Ab7", "G7"],
@@ -353,9 +363,9 @@ let activeModuleId = safeGetStoredModule() || MODULES[0].id;
 if (!MODULES.some((module) => module.id === activeModuleId)) {
   activeModuleId = MODULES[0].id;
 }
-const zoneSelectionByModule = {};
+const transposeSelectionByModule = {};
 Object.entries(PROGRESSION_DATA).forEach(([moduleId, data]) => {
-  zoneSelectionByModule[moduleId] = data.zone === "mid" ? "mid" : "low";
+  transposeSelectionByModule[moduleId] = data.tonic || "C";
 });
 
 const backingTrackState = {
@@ -410,6 +420,57 @@ function parseChordSymbol(chordSymbol) {
   }
 
   return null;
+}
+
+function noteFromIndex(index, preferFlats = false) {
+  const normalized = ((index % 12) + 12) % 12;
+  const sharpNames = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+  const flatNames = ["C", "Db", "D", "Eb", "E", "F", "Gb", "G", "Ab", "A", "Bb", "B"];
+  return preferFlats ? flatNames[normalized] : sharpNames[normalized];
+}
+
+function moduleZone(moduleId) {
+  const data = PROGRESSION_DATA[moduleId];
+  return data && data.zone === "mid" ? "mid" : "low";
+}
+
+function transposeChordSymbol(chordSymbol, semitoneShift, preferFlats = false) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return chordSymbol;
+
+  const rootIndex = noteToIndex(parsed.root);
+  if (rootIndex < 0) return chordSymbol;
+
+  const qualitySuffixByKey = {
+    maj7: "maj7",
+    m7: "m7",
+    dom7: "7",
+    m7b5: "m7b5",
+    dim7: "dim7",
+  };
+
+  const nextRoot = noteFromIndex(rootIndex + semitoneShift, preferFlats);
+  const qualitySuffix = qualitySuffixByKey[parsed.quality] || "";
+  let nextChord = `${nextRoot}${qualitySuffix}`;
+
+  if (parsed.bass) {
+    const bassIndex = noteToIndex(parsed.bass);
+    if (bassIndex >= 0) {
+      nextChord += `/${noteFromIndex(bassIndex + semitoneShift, preferFlats)}`;
+    }
+  }
+
+  return nextChord;
+}
+
+function getTransposedBarsForModule(moduleId, data) {
+  const moduleData = data || PROGRESSION_DATA[moduleId];
+  const tonic = moduleData.tonic || "C";
+  const selectedKey = transposeSelectionByModule[moduleId] || tonic;
+  const shift = (noteToIndex(selectedKey) - noteToIndex(tonic) + 12) % 12;
+  if (shift === 0) return [...moduleData.bars];
+  const preferFlats = selectedKey.includes("b");
+  return moduleData.bars.map((chord) => transposeChordSymbol(chord, shift, preferFlats));
 }
 
 function rootCandidates(root, rootString) {
@@ -823,7 +884,7 @@ function playGuitarStrum(ctx, notes, startTime, options = {}) {
 
 async function playChordPreview(chordSymbol, moduleId) {
   const ctx = await getAudioContext();
-  const zone = zoneSelectionByModule[moduleId] || "low";
+  const zone = moduleZone(moduleId);
   const notes = chordFrequenciesFromSymbol(chordSymbol, zone);
   if (!notes.length) return;
   playGuitarStrum(ctx, notes, ctx.currentTime, {
@@ -894,7 +955,7 @@ function scheduleBass(time, chordSymbol, beatInBar) {
 function scheduleCompingChord(time, chordSymbol, beatInBar) {
   if (beatInBar !== 1 && beatInBar !== 3) return;
   const ctx = backingTrackState.audioCtx;
-  const zone = zoneSelectionByModule[backingTrackState.moduleId] || "low";
+  const zone = moduleZone(backingTrackState.moduleId);
   const notes = chordFrequenciesFromSymbol(chordSymbol, zone);
   if (!notes.length) return;
 
@@ -1269,10 +1330,11 @@ function wireTutorialModule() {
 
 function renderProgressionModule(module) {
   const data = PROGRESSION_DATA[module.id];
-  const bars = data.bars;
+  const transposeKey = transposeSelectionByModule[module.id] || data.tonic || "C";
+  const bars = getTransposedBarsForModule(module.id, data);
   const uniqueChords = uniqueChordsInOrder(bars);
   const tempoDefault = 80;
-  const selectedZone = zoneSelectionByModule[module.id] || "low";
+  const selectedZone = moduleZone(module.id);
 
   const barsMarkup = bars
     .map(
@@ -1300,8 +1362,17 @@ function renderProgressionModule(module) {
   return `
     <section class="lesson-block">
       <h3>Progression: ${module.title}</h3>
-      <p><strong>Key/Context:</strong> ${data.keyLabel} <span class="chip">Neck zone: ${selectedZone}</span></p>
+      <p><strong>Key/Context:</strong> ${data.keyLabel} <span class="chip">Transpose key: ${transposeKey}</span></p>
       <div class="practice-player">
+        <div class="transpose-chip-wrap">
+          <span>Transpose</span>
+          <div class="transpose-chip-group" role="radiogroup" aria-label="Transpose key">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="transpose-choice ${transposeKey === note ? "active" : ""}" data-transpose-option="${note}" aria-pressed="${transposeKey === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
         <label>
           Tempo (BPM)
           <input id="tempoInput-${module.id}" class="tempo-input" type="number" min="50" max="220" value="${tempoDefault}" />
@@ -1319,15 +1390,6 @@ function renderProgressionModule(module) {
 
     <section class="lesson-block">
       <h3>Chord Fingerings For This Progression</h3>
-      <div class="fingering-controls">
-        <label>
-          Neck zone
-          <select id="zoneSelect-${module.id}" class="zone-select">
-            <option value="low" ${selectedZone === "low" ? "selected" : ""}>Low neck zone</option>
-            <option value="mid" ${selectedZone === "mid" ? "selected" : ""}>Mid neck zone</option>
-          </select>
-        </label>
-      </div>
       <div class="diagram-grid">${diagramsMarkup}</div>
     </section>
   `;
@@ -1341,26 +1403,29 @@ function wireChordPreviewButtons() {
 }
 
 function wirePracticePlayer(module, data) {
-  const zoneSelect = document.getElementById(`zoneSelect-${module.id}`);
+  const transposeButtons = lessonContent.querySelectorAll("[data-transpose-option]");
   const tempoInput = document.getElementById(`tempoInput-${module.id}`);
   const startBtn = document.getElementById(`startTrackBtn-${module.id}`);
   const stopBtn = document.getElementById(`stopTrackBtn-${module.id}`);
   const statusEl = document.getElementById(`trackStatus-${module.id}`);
   const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
 
-  if (!zoneSelect || !tempoInput || !startBtn || !stopBtn || !statusEl) return;
+  if (!tempoInput || !startBtn || !stopBtn || !statusEl) return;
 
-  zoneSelect.addEventListener("change", () => {
-    zoneSelectionByModule[module.id] = zoneSelect.value === "mid" ? "mid" : "low";
-    stopBackingTrack();
-    renderLesson();
+  transposeButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      transposeSelectionByModule[module.id] = button.dataset.transposeOption || data.tonic || "C";
+      stopBackingTrack();
+      renderLesson();
+    });
   });
 
   startBtn.addEventListener("click", async () => {
     try {
       const tempo = clampTempo(Number(tempoInput.value));
       tempoInput.value = String(tempo);
-      await startBackingTrack(module.id, data.bars, tempo, statusEl, startBtn, stopBtn, barEls);
+      const transposedBars = getTransposedBarsForModule(module.id, data);
+      await startBackingTrack(module.id, transposedBars, tempo, statusEl, startBtn, stopBtn, barEls);
     } catch (error) {
       console.error(error);
       stopBackingTrack("Unable to start: " + String(error.message || error));

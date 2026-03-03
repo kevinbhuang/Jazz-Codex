@@ -362,7 +362,6 @@ button {
   border-color: var(--accent-2);
 }
 
-.zone-select,
 .tempo-input {
   width: 150px;
   margin-left: 0;
@@ -370,6 +369,32 @@ button {
 
 .practice-player label {
   margin-right: 0.7rem;
+}
+
+.transpose-chip-wrap {
+  display: grid;
+  gap: 0.25rem;
+  margin-bottom: 0.45rem;
+}
+
+.transpose-chip-group {
+  display: inline-flex;
+  gap: 0.35rem;
+  flex-wrap: wrap;
+}
+
+.transpose-choice {
+  min-width: 2.4rem;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: #fff;
+}
+
+.transpose-choice.active {
+  background: color-mix(in oklab, var(--accent-3), white 30%);
+  border-color: var(--accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--accent), white 35%);
 }
 
 .fingering-controls {
