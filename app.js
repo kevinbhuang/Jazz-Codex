@@ -229,6 +229,9 @@ const nextModuleBtn = document.getElementById("nextModuleBtn");
 const lessonContent = document.getElementById("lessonContent");
 
 let activeModuleId = localStorage.getItem("activeJazzModule") || MODULES[0].id;
+const zoneSelectionByModule = Object.fromEntries(
+  Object.entries(PROGRESSION_DATA).map(([moduleId, data]) => [moduleId, data.zone === "mid" ? "mid" : "low"])
+);
 const backingTrackState = {
   audioCtx: null,
   isPlaying: false,
@@ -435,6 +438,51 @@ function noteFrequency(note, octave) {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
+async function getAudioContext() {
+  if (!backingTrackState.audioCtx) {
+    backingTrackState.audioCtx = new window.AudioContext();
+  }
+  await backingTrackState.audioCtx.resume();
+  return backingTrackState.audioCtx;
+}
+
+function chordPreviewFrequencies(chordSymbol) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return [];
+
+  const qualityInfo = CHORD_QUALITIES[parsed.quality];
+  const rootIndex = noteToIndex(parsed.root);
+  if (!qualityInfo || rootIndex < 0) return [];
+
+  const baseMidi = (3 + 1) * 12 + rootIndex;
+  return qualityInfo.semitones.map((semi) => 440 * Math.pow(2, (baseMidi + semi - 69) / 12));
+}
+
+async function playChordPreview(chordSymbol) {
+  const ctx = await getAudioContext();
+  const frequencies = chordPreviewFrequencies(chordSymbol);
+  if (!frequencies.length) return;
+
+  const now = ctx.currentTime;
+  const master = ctx.createGain();
+  master.gain.setValueAtTime(0.0001, now);
+  master.gain.exponentialRampToValueAtTime(0.12, now + 0.02);
+  master.gain.exponentialRampToValueAtTime(0.0001, now + 0.9);
+  master.connect(ctx.destination);
+
+  frequencies.forEach((frequency, idx) => {
+    const osc = ctx.createOscillator();
+    const voiceGain = ctx.createGain();
+    osc.type = idx === 0 ? "triangle" : "sine";
+    osc.frequency.setValueAtTime(frequency, now);
+    voiceGain.gain.setValueAtTime(idx === 0 ? 1 : 0.75, now);
+    osc.connect(voiceGain);
+    voiceGain.connect(master);
+    osc.start(now);
+    osc.stop(now + 0.92);
+  });
+}
+
 function scheduleClick(time, beatInBar) {
   const ctx = backingTrackState.audioCtx;
   const osc = ctx.createOscillator();
@@ -552,10 +600,7 @@ async function startBackingTrack(moduleId, bars, tempo, statusEl, startBtn, stop
     stopBackingTrack();
   }
 
-  if (!backingTrackState.audioCtx) {
-    backingTrackState.audioCtx = new window.AudioContext();
-  }
-  await backingTrackState.audioCtx.resume();
+  await getAudioContext();
 
   backingTrackState.moduleId = moduleId;
   backingTrackState.bars = bars;
@@ -575,20 +620,6 @@ async function startBackingTrack(moduleId, bars, tempo, statusEl, startBtn, stop
   backingTrackState.timerId = setInterval(schedulerLoop, 25);
 }
 
-function renderSchematicBlock() {
-  const sample = buildVoicing("Cmaj7", "mid");
-  return `
-    <section class="lesson-block schematic-block">
-      <h3>Fingering Schematic (always use this map)</h3>
-      <p>
-        Left side = <strong>x/o</strong> (mute/open). Bottom = fret numbers. Bottom thick line = low E string.
-        Right side = left-hand fingering (1-4) aligned to each string.
-      </p>
-      <div class="schematic-wrap">${renderDiagram(sample)}</div>
-    </section>
-  `;
-}
-
 function uniqueChordsInOrder(bars) {
   const seen = new Set();
   const ordered = [];
@@ -606,6 +637,7 @@ function renderProgressionModule(module) {
   const bars = data.bars;
   const uniqueChords = uniqueChordsInOrder(bars);
   const tempoDefault = 80;
+  const selectedZone = zoneSelectionByModule[module.id] || "low";
 
   const barsMarkup = bars
     .map(
@@ -616,14 +648,14 @@ function renderProgressionModule(module) {
 
   const diagramsMarkup = uniqueChords
     .map((chord) => {
-      const voicing = buildVoicing(chord, data.zone);
+      const voicing = buildVoicing(chord, selectedZone);
       if (!voicing) return "";
       return `
         <article class="chord-card">
-          <h4>${chord}</h4>
-          <p class="mini">${voicing.name}</p>
-          <p class="mini">Strings 6->1: ${voicing.frets.join(" ")}</p>
-          <p class="mini">Fingers 6->1: ${voicing.resolvedFingers.join(" ")}</p>
+          <div class="chord-card-top">
+            <h4>${chord}</h4>
+            <button type="button" class="play-chord-btn" data-chord="${chord}" aria-label="Play ${chord}">🔈</button>
+          </div>
           ${renderDiagram(voicing)}
         </article>
       `;
@@ -631,11 +663,17 @@ function renderProgressionModule(module) {
     .join("");
 
   return `
-    ${renderSchematicBlock()}
     <section class="lesson-block">
       <h3>Progression: ${module.title}</h3>
-      <p><strong>Key:</strong> ${data.keyLabel} <span class="chip">Suggested neck zone: ${data.zone}</span></p>
+      <p><strong>Key:</strong> ${data.keyLabel} <span class="chip">Neck zone: ${selectedZone}</span></p>
       <div class="practice-player">
+        <label>
+          Neck zone
+          <select id="zoneSelect-${module.id}" class="zone-select">
+            <option value="low" ${selectedZone === "low" ? "selected" : ""}>Low neck zone</option>
+            <option value="mid" ${selectedZone === "mid" ? "selected" : ""}>Mid neck zone</option>
+          </select>
+        </label>
         <label>
           Tempo (BPM)
           <input id="tempoInput-${module.id}" class="tempo-input" type="number" min="50" max="220" value="${tempoDefault}" />
@@ -658,14 +696,29 @@ function renderProgressionModule(module) {
   `;
 }
 
+function wireChordPreviewButtons() {
+  lessonContent.querySelectorAll(".play-chord-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      await playChordPreview(button.dataset.chord || "");
+    });
+  });
+}
+
 function wirePracticePlayer(module, data) {
+  const zoneSelect = document.getElementById(`zoneSelect-${module.id}`);
   const tempoInput = document.getElementById(`tempoInput-${module.id}`);
   const startBtn = document.getElementById(`startTrackBtn-${module.id}`);
   const stopBtn = document.getElementById(`stopTrackBtn-${module.id}`);
   const statusEl = document.getElementById(`trackStatus-${module.id}`);
   const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
 
-  if (!tempoInput || !startBtn || !stopBtn || !statusEl) return;
+  if (!zoneSelect || !tempoInput || !startBtn || !stopBtn || !statusEl) return;
+
+  zoneSelect.addEventListener("change", () => {
+    zoneSelectionByModule[module.id] = zoneSelect.value === "mid" ? "mid" : "low";
+    stopBackingTrack();
+    renderLesson();
+  });
 
   startBtn.addEventListener("click", async () => {
     const tempo = clampTempo(Number(tempoInput.value));
@@ -694,7 +747,6 @@ function renderSongsModule() {
   ).join("");
 
   return `
-    ${renderSchematicBlock()}
     <section class="lesson-block">
       <h3>Now Play Real Songs</h3>
       <p>
@@ -715,6 +767,7 @@ function renderLesson() {
   }
 
   lessonContent.innerHTML = renderProgressionModule(module);
+  wireChordPreviewButtons();
   wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
 }
 

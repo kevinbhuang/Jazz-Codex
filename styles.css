@@ -330,3 +330,35 @@ button {
   border-color: var(--accent);
   box-shadow: inset 4px 0 0 var(--accent);
 }
+
+.chord-card-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+
+.play-chord-btn {
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.play-chord-btn:hover {
+  border-color: var(--accent-2);
+}
+
+.zone-select,
+.tempo-input {
+  width: 150px;
+  margin-left: 0;
+}
+
+.practice-player label {
+  margin-right: 0.7rem;
+}
