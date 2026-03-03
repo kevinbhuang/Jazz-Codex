@@ -57,7 +57,7 @@ const MODULES = [
   {
     id: "top_jazz_scales",
     kind: "scales",
-    title: "Top 5 Jazz Scales",
+    title: "Jazz Scales",
     blurb: "Map scales directly to chord qualities in real progressions.",
   },
 ];
@@ -82,6 +82,7 @@ const playAlongState = {
   key: "C",
   tempo: 90,
   includeDrums: true,
+  includeMetronome: false,
 };
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
@@ -394,6 +395,7 @@ Object.entries(PROGRESSION_DATA).forEach(([moduleId, data]) => {
 
 const backingTrackState = {
   audioCtx: null,
+  noiseBuffer: null,
   isPlaying: false,
   moduleId: null,
   bars: [],
@@ -542,17 +544,29 @@ function scalePointsForZone(root, scaleId, zone) {
 }
 
 function scaleRunFrequencies(root, scaleId, zone) {
-  const points = scalePointsForZone(root, scaleId, zone);
-  if (!points.length) return [];
-  const sorted = [...points].sort((a, b) => a.midi - b.midi);
-  const uniqueMidi = [...new Set(sorted.map((point) => point.midi))];
-  const limited = uniqueMidi.slice(0, 9);
-  const freqs = limited.map((midi) => 440 * Math.pow(2, (midi - 69) / 12));
-  if (freqs.length > 1) {
-    const descending = [...freqs].slice(0, freqs.length - 1).reverse();
-    return [...freqs, ...descending];
+  const rootIndex = noteToIndex(root);
+  if (rootIndex < 0) return [];
+  const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
+  const rootPoints = scalePointsForZone(root, scaleId, zone).filter((point) => point.isRoot);
+
+  const targetMidi = zone === "mid" ? 60 : 48;
+  let rootMidi = targetMidi;
+  if (rootPoints.length) {
+    rootMidi = rootPoints
+      .slice()
+      .sort((a, b) => Math.abs(a.midi - targetMidi) - Math.abs(b.midi - targetMidi))[0].midi;
+  } else {
+    for (let midi = zone === "mid" ? 52 : 40; midi <= 72; midi += 1) {
+      if (((midi % 12) + 12) % 12 === rootIndex) {
+        rootMidi = midi;
+        break;
+      }
+    }
   }
-  return freqs;
+
+  const ascendingMidi = [...scale.intervals, 12].map((interval) => rootMidi + interval);
+  const descendingMidi = ascendingMidi.slice(0, ascendingMidi.length - 1).reverse();
+  return [...ascendingMidi, ...descendingMidi].map((midi) => 440 * Math.pow(2, (midi - 69) / 12));
 }
 
 function scaleIdLabel(scaleId) {
@@ -1090,10 +1104,128 @@ async function playScalePreview(root, scaleId, zone) {
   const runFrequencies = scaleRunFrequencies(root, scaleId, zone);
   if (!runFrequencies.length) return;
   playScaleRun(ctx, runFrequencies, ctx.currentTime, {
-    stepSeconds: 0.32,
+    stepSeconds: 0.42,
     peakGain: 0.1,
     releaseSeconds: 0.42,
   });
+}
+
+function getNoiseBuffer(ctx) {
+  if (backingTrackState.noiseBuffer) return backingTrackState.noiseBuffer;
+  const length = Math.max(1, Math.floor(ctx.sampleRate * 0.25));
+  const buffer = ctx.createBuffer(1, length, ctx.sampleRate);
+  const data = buffer.getChannelData(0);
+  for (let i = 0; i < length; i += 1) {
+    data[i] = Math.random() * 2 - 1;
+  }
+  backingTrackState.noiseBuffer = buffer;
+  return buffer;
+}
+
+function scheduleNoiseHit(time, options = {}) {
+  const ctx = backingTrackState.audioCtx;
+  if (!ctx) return;
+  const source = ctx.createBufferSource();
+  const hp = ctx.createBiquadFilter();
+  const lp = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+
+  source.buffer = getNoiseBuffer(ctx);
+
+  hp.type = "highpass";
+  hp.frequency.setValueAtTime(options.hp || 3500, time);
+  hp.Q.setValueAtTime(options.hpQ || 0.7, time);
+
+  lp.type = "lowpass";
+  lp.frequency.setValueAtTime(options.lp || 12000, time);
+  lp.Q.setValueAtTime(options.lpQ || 0.6, time);
+
+  const peak = options.peakGain || 0.08;
+  const attack = options.attack || 0.0015;
+  const release = options.release || 0.055;
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(peak, time + attack);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + release);
+
+  source.connect(hp);
+  hp.connect(lp);
+  lp.connect(gain);
+  gain.connect(ctx.destination);
+  source.start(time);
+  source.stop(time + Math.max(0.07, release + 0.02));
+}
+
+function scheduleKick(time, beatInBar) {
+  const ctx = backingTrackState.audioCtx;
+  if (!ctx) return;
+  const osc = ctx.createOscillator();
+  const filter = ctx.createBiquadFilter();
+  const gain = ctx.createGain();
+  const accent = beatInBar === 1;
+
+  osc.type = "sine";
+  osc.frequency.setValueAtTime(accent ? 95 : 82, time);
+  osc.frequency.exponentialRampToValueAtTime(45, time + 0.085);
+
+  filter.type = "lowpass";
+  filter.frequency.setValueAtTime(220, time);
+
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(accent ? 0.25 : 0.16, time + 0.004);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.19);
+
+  osc.connect(filter);
+  filter.connect(gain);
+  gain.connect(ctx.destination);
+  osc.start(time);
+  osc.stop(time + 0.21);
+}
+
+function scheduleSnare(time, accent = false) {
+  scheduleNoiseHit(time, {
+    hp: 1200,
+    lp: 7000,
+    peakGain: accent ? 0.16 : 0.12,
+    release: accent ? 0.14 : 0.11,
+  });
+
+  const ctx = backingTrackState.audioCtx;
+  if (!ctx) return;
+  const tone = ctx.createOscillator();
+  const gain = ctx.createGain();
+  tone.type = "triangle";
+  tone.frequency.setValueAtTime(180, time);
+  tone.frequency.exponentialRampToValueAtTime(110, time + 0.09);
+  gain.gain.setValueAtTime(0.0001, time);
+  gain.gain.exponentialRampToValueAtTime(accent ? 0.07 : 0.05, time + 0.003);
+  gain.gain.exponentialRampToValueAtTime(0.0001, time + 0.11);
+  tone.connect(gain);
+  gain.connect(ctx.destination);
+  tone.start(time);
+  tone.stop(time + 0.12);
+}
+
+function scheduleHiHat(time, options = {}) {
+  scheduleNoiseHit(time, {
+    hp: 5200,
+    lp: 13500,
+    peakGain: options.peakGain || 0.07,
+    release: options.release || 0.05,
+  });
+}
+
+function scheduleJazzDrums(time, beatInBar) {
+  if (beatInBar === 1 || beatInBar === 3) {
+    scheduleKick(time, beatInBar);
+  }
+  if (beatInBar === 2 || beatInBar === 4) {
+    scheduleSnare(time, true);
+  }
+  scheduleHiHat(time, { peakGain: beatInBar === 2 || beatInBar === 4 ? 0.08 : 0.065, release: 0.05 });
+
+  // Swung offbeat hat ("and" of each beat) for a jazz ride/hat feel.
+  const beatSeconds = 60 / backingTrackState.tempo;
+  scheduleHiHat(time + beatSeconds * 0.62, { peakGain: 0.055, release: 0.04 });
 }
 
 function scheduleClick(time, beatInBar) {
@@ -1191,6 +1323,9 @@ function scheduleBeat() {
   if (backingTrackState.mode === "playalong") {
     scheduleCompingChord(time, chord, beatInBar);
     if (playAlongState.includeDrums) {
+      scheduleJazzDrums(time, beatInBar);
+    }
+    if (playAlongState.includeMetronome) {
       scheduleClick(time, beatInBar);
     }
   } else {
@@ -1620,7 +1755,7 @@ function renderScaleModule() {
 
     <section class="lesson-block">
       <h3>Play-Along Loop</h3>
-      <p>Simple drum + bass groove so you can comp or solo over this progression.</p>
+      <p>Guitar comping loop with optional jazz drums and metronome.</p>
       <div class="practice-player">
         <label>
           Progression
@@ -1645,7 +1780,11 @@ function renderScaleModule() {
         </label>
         <label>
           <input id="playAlongDrumsToggle" type="checkbox" ${playAlongState.includeDrums ? "checked" : ""} />
-          Include drum beat
+          Include jazz drum groove
+        </label>
+        <label>
+          <input id="playAlongMetronomeToggle" type="checkbox" ${playAlongState.includeMetronome ? "checked" : ""} />
+          Include metronome click
         </label>
         <div class="player-controls">
           <button id="startPlayAlongBtn" class="start-track-btn" type="button">Start Play-Along Loop</button>
@@ -1731,6 +1870,7 @@ function wirePlayAlongModule() {
   const progressionSelect = document.getElementById("playAlongProgressionSelect");
   const tempoInput = document.getElementById("playAlongTempoInput");
   const drumsToggle = document.getElementById("playAlongDrumsToggle");
+  const metronomeToggle = document.getElementById("playAlongMetronomeToggle");
   const startBtn = document.getElementById("startPlayAlongBtn");
   const stopBtn = document.getElementById("stopPlayAlongBtn");
   const statusEl = document.getElementById("playAlongStatus");
@@ -1758,8 +1898,19 @@ function wirePlayAlongModule() {
       playAlongState.includeDrums = drumsToggle.checked;
       if (backingTrackState.isPlaying && backingTrackState.moduleId === "play_along_loop") {
         statusEl.textContent = playAlongState.includeDrums
-          ? "Drum beat enabled"
-          : "Drum beat disabled";
+          ? "Jazz drum groove enabled"
+          : "Jazz drum groove disabled";
+      }
+    });
+  }
+
+  if (metronomeToggle) {
+    metronomeToggle.addEventListener("change", () => {
+      playAlongState.includeMetronome = metronomeToggle.checked;
+      if (backingTrackState.isPlaying && backingTrackState.moduleId === "play_along_loop") {
+        statusEl.textContent = playAlongState.includeMetronome
+          ? "Metronome click enabled"
+          : "Metronome click disabled";
       }
     });
   }
