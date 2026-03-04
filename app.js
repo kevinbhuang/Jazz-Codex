@@ -16,8 +16,8 @@ const MODULES = [
   {
     id: "shell_chords_foundation",
     kind: "tutorial",
-    title: "Shell Chords And Chord Construction",
-    blurb: "Step 1: Learn 6th-string and 5th-string shell logic.",
+    title: "Chord Construction",
+    blurb: "Step 1: Learn 6th-string and 5th-string chord construction.",
   },
   {
     id: "major_iivi",
@@ -60,6 +60,12 @@ const MODULES = [
     title: "Jazz Scales",
     blurb: "Map scales directly to chord qualities in real progressions.",
   },
+  {
+    id: "major_scale_harmony",
+    kind: "major_scales",
+    title: "Major Scales",
+    blurb: "Step 4: Build diatonic 7th chords with Roman numerals.",
+  },
 ];
 
 const ROOT_NOTE_OPTIONS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
@@ -75,6 +81,11 @@ const scaleModuleState = {
   scaleId: "ionian",
   applyModuleId: "major_iivi",
   applyKey: "C",
+};
+
+const majorScaleStepState = {
+  key: "C",
+  zone: "low",
 };
 
 const playAlongState = {
@@ -143,6 +154,26 @@ const SCALE_LIBRARY = {
     targetLabel: "Minor tonic color and altered dominant source",
   },
 };
+
+const MAJOR_SCALE_ROMANS = ["I", "ii", "iii", "IV", "V", "vi", "vii&deg;"];
+const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
+const MAJOR_SCALE_QUALITIES = ["maj7", "m7", "m7", "maj7", "dom7", "m7", "m7b5"];
+
+function majorScaleChordsForKey(key) {
+  const tonicIndex = noteToIndex(key);
+  if (tonicIndex < 0) return [];
+  const preferFlats = key.includes("b");
+
+  return MAJOR_SCALE_INTERVALS.map((interval, idx) => {
+    const root = noteFromIndex(tonicIndex + interval, preferFlats);
+    const quality = MAJOR_SCALE_QUALITIES[idx];
+    return {
+      roman: MAJOR_SCALE_ROMANS[idx],
+      chord: chordSymbolFromRootQuality(root, quality),
+      quality,
+    };
+  });
+}
 
 const PROGRESSION_DATA = {
   major_iivi: {
@@ -332,6 +363,11 @@ const CHORD_QUALITIES = {
 
 const INTERVAL_LABELS = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "#5", "6", "b7", "7"];
 
+function intervalDegreeLabel(interval, quality = null) {
+  if (quality === "dim7" && interval === 9) return "bb7";
+  return INTERVAL_LABELS[interval] || "";
+}
+
 const VOICING_TEMPLATES = {
   maj7: [
     { name: "Root-6 shell", rootString: 6, intervals: [0, null, 11, 4, null, null] },
@@ -347,11 +383,11 @@ const VOICING_TEMPLATES = {
   ],
   m7b5: [
     { name: "Root-6 m7b5", rootString: 6, intervals: [0, null, 10, 3, 6, null] },
-    { name: "Root-5 m7b5", rootString: 5, intervals: [null, 0, 10, 6, 3, null] },
+    { name: "Root-5 m7b5", rootString: 5, intervals: [null, 0, 6, 10, 3, null] },
   ],
   dim7: [
-    { name: "Root-6 dim7", rootString: 6, intervals: [0, null, 9, 6, 3, null] },
-    { name: "Root-5 dim7", rootString: 5, intervals: [null, 0, 9, 6, 3, null] },
+    { name: "Root-6 dim7", rootString: 6, intervals: [0, null, 9, 3, 6, null] },
+    { name: "Root-5 dim7", rootString: 5, intervals: [null, 0, 6, 9, 3, null] },
   ],
 };
 
@@ -411,6 +447,11 @@ if (!MODULES.some((module) => module.id === activeModuleId)) {
 const transposeSelectionByModule = {};
 Object.entries(PROGRESSION_DATA).forEach(([moduleId, data]) => {
   transposeSelectionByModule[moduleId] = data.tonic || "C";
+});
+
+const includeFifthSelectionByModule = {};
+Object.keys(PROGRESSION_DATA).forEach((moduleId) => {
+  includeFifthSelectionByModule[moduleId] = false;
 });
 
 const backingTrackState = {
@@ -479,6 +520,10 @@ function noteFromIndex(index, preferFlats = false) {
 function moduleZone(moduleId) {
   const data = PROGRESSION_DATA[moduleId];
   return data && data.zone === "mid" ? "mid" : "low";
+}
+
+function moduleIncludeFifth(moduleId) {
+  return includeFifthSelectionByModule[moduleId] === true;
 }
 
 function transposeChordSymbol(chordSymbol, semitoneShift, preferFlats = false) {
@@ -576,18 +621,25 @@ function buildVoicingWithTemplate(chordSymbol, zone, template, options = {}) {
   if (rootIndex < 0) return null;
   const placement = rootPlacement(parsed.root, template.rootString, zone);
   const anchorFret = placement.fret;
+  const window = fourFretWindow(anchorFret);
 
   const fretsBase = template.intervals.map((interval, idx) => {
     if (interval === null) return "x";
     const stringNumber = 6 - idx;
     const targetNoteIndex = (rootIndex + interval + 12) % 12;
     const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
-    const fret = chooseClosestFret(candidates, anchorFret);
+    const fret = chooseClosestFret(candidates, anchorFret, window);
     if (fret === null || fret < 0 || fret > 16) return "x";
     return fret;
   });
 
-  const withBuilderOptions = applyBuilderOptionsToFrets(fretsBase, template, rootIndex, anchorFret, options);
+  const withBuilderOptions = applyBuilderOptionsToFrets(
+    fretsBase,
+    template,
+    rootIndex,
+    anchorFret,
+    { ...options, quality: parsed.quality }
+  );
   const frets = applySlashBassIfNeeded(parsed, withBuilderOptions, anchorFret);
   const resolvedFingers = resolveFingerings(frets);
 
@@ -597,7 +649,7 @@ function buildVoicingWithTemplate(chordSymbol, zone, template, options = {}) {
     const noteIndex = (openNoteByString[stringNumber] + fret) % 12;
     const interval = (noteIndex - rootIndex + 12) % 12;
     return {
-      degree: INTERVAL_LABELS[interval],
+      degree: intervalDegreeLabel(interval, parsed.quality),
       noteName: noteFromIndex(noteIndex, parsed.root.includes("b")),
       isRoot: interval === 0,
     };
@@ -806,16 +858,34 @@ function candidateFretsForStringNote(targetNoteIndex, stringNumber) {
   return candidates;
 }
 
-function chooseClosestFret(candidates, anchorFret) {
+function fourFretWindow(anchorFret) {
+  let min = Math.max(0, anchorFret - 1);
+  let max = min + 3;
+  if (max > 16) {
+    max = 16;
+    min = 13;
+  }
+  return { min, max };
+}
+
+function chooseClosestFret(candidates, anchorFret, window = null) {
   if (!candidates.length) return null;
+
+  if (window && Number.isInteger(window.min) && Number.isInteger(window.max)) {
+    const inWindow = candidates.filter((fret) => fret >= window.min && fret <= window.max);
+    if (!inWindow.length) return null;
+    return inWindow.sort((a, b) => Math.abs(a - anchorFret) - Math.abs(b - anchorFret) || a - b)[0];
+  }
+
   const closePool = candidates.filter((fret) => Math.abs(fret - anchorFret) <= 4);
   const pool = closePool.length ? closePool : candidates;
   return pool.sort((a, b) => Math.abs(a - anchorFret) - Math.abs(b - anchorFret) || a - b)[0];
 }
 
 function placeIntervalOnBestString(frets, preferredStrings, interval, rootIndex, anchorFret) {
-  const windowMin = Math.max(0, anchorFret - 1);
-  const windowMax = Math.min(16, anchorFret + 3);
+  const window = fourFretWindow(anchorFret);
+  const windowMin = window.min;
+  const windowMax = window.max;
   const ranked = [];
 
   preferredStrings.forEach((stringNumber, rank) => {
@@ -826,12 +896,12 @@ function placeIntervalOnBestString(frets, preferredStrings, interval, rootIndex,
     const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
     candidates.forEach((fret) => {
       const inWindow = fret >= windowMin && fret <= windowMax;
+      if (!inWindow) return;
       const distance = Math.abs(fret - anchorFret);
-      const outsidePenalty = inWindow ? 0 : 12;
       ranked.push({
         stringNumber,
         fret,
-        score: outsidePenalty + distance + rank * 0.2,
+        score: distance + rank * 0.2,
       });
     });
   });
@@ -846,25 +916,27 @@ function placeIntervalOnBestString(frets, preferredStrings, interval, rootIndex,
 
 function applyBuilderOptionsToFrets(frets, template, rootIndex, anchorFret, options = {}) {
   const includeFifth = options.includeFifth === true;
+  const quality = options.quality || null;
+  const includeNaturalFifth = includeFifth && quality !== "m7b5" && quality !== "dim7";
   const extensionInterval = EXTENSION_INTERVALS[options.extension] ?? null;
 
   let next = [...frets];
   if (template.rootString === 6) {
-    if (includeFifth) {
-      next = placeIntervalOnBestString(next, [2, 5, 1], 7, rootIndex, anchorFret);
+    if (includeNaturalFifth) {
+      next = placeIntervalOnBestString(next, [2, 4, 1], 7, rootIndex, anchorFret);
     }
     if (extensionInterval !== null) {
-      next = placeIntervalOnBestString(next, [2, 5, 1], extensionInterval, rootIndex, anchorFret);
+      next = placeIntervalOnBestString(next, [2, 4, 1], extensionInterval, rootIndex, anchorFret);
     }
     return next;
   }
 
   if (template.rootString === 5) {
-    if (includeFifth) {
-      next = placeIntervalOnBestString(next, [4, 1, 6], 7, rootIndex, anchorFret);
+    if (includeNaturalFifth) {
+      next = placeIntervalOnBestString(next, [4, 2, 3], 7, rootIndex, anchorFret);
     }
     if (extensionInterval !== null) {
-      next = placeIntervalOnBestString(next, [1, 4, 6], extensionInterval, rootIndex, anchorFret);
+      next = placeIntervalOnBestString(next, [4, 2, 3], extensionInterval, rootIndex, anchorFret);
     }
   }
   return next;
@@ -890,10 +962,11 @@ function applySlashBassIfNeeded(parsed, frets, anchorFret) {
   const bassIdx = noteToIndex(parsed.bass);
   if (bassIdx < 0) return frets;
 
+  const window = fourFretWindow(anchorFret);
   const candidates6 = candidateFretsForStringNote(bassIdx, 6);
   const candidates5 = candidateFretsForStringNote(bassIdx, 5);
-  const fret6 = chooseClosestFret(candidates6, anchorFret);
-  const fret5 = chooseClosestFret(candidates5, anchorFret);
+  const fret6 = chooseClosestFret(candidates6, anchorFret, window);
+  const fret5 = chooseClosestFret(candidates5, anchorFret, window);
 
   const out = [...frets];
 
@@ -927,18 +1000,25 @@ function buildVoicing(chordSymbol, zone, options = {}) {
 
   const template = selected.template;
   const anchorFret = selected.anchorFret;
+  const window = fourFretWindow(anchorFret);
 
   const fretsBase = template.intervals.map((interval, idx) => {
     if (interval === null) return "x";
     const stringNumber = 6 - idx;
     const targetNoteIndex = (rootIndex + interval + 12) % 12;
     const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber);
-    const fret = chooseClosestFret(candidates, anchorFret);
+    const fret = chooseClosestFret(candidates, anchorFret, window);
     if (fret === null || fret < 0 || fret > 16) return "x";
     return fret;
   });
 
-  const withBuilderOptions = applyBuilderOptionsToFrets(fretsBase, template, rootIndex, anchorFret, options);
+  const withBuilderOptions = applyBuilderOptionsToFrets(
+    fretsBase,
+    template,
+    rootIndex,
+    anchorFret,
+    { ...options, quality: parsed.quality }
+  );
   const frets = applySlashBassIfNeeded(parsed, withBuilderOptions, anchorFret);
   const resolvedFingers = resolveFingerings(frets);
 
@@ -948,7 +1028,7 @@ function buildVoicing(chordSymbol, zone, options = {}) {
     const noteIndex = (openNoteByString[stringNumber] + fret) % 12;
     const interval = (noteIndex - rootIndex + 12) % 12;
     return {
-      degree: INTERVAL_LABELS[interval],
+      degree: intervalDegreeLabel(interval, quality),
       noteName: noteFromIndex(noteIndex, root.includes("b")),
       isRoot: interval === 0,
     };
@@ -1036,7 +1116,7 @@ function renderDiagram(voicing, options = {}) {
       const x = left + (fret - baseFret + 0.5) * fretGap;
       const fill = markerFill(tone ? tone.degree : "", tone && tone.isRoot);
       const degree = tone ? tone.degree : "1";
-      const degreeFont = degree.length > 1 ? 7 : 9;
+      const degreeFont = degree.length > 2 ? 6 : degree.length > 1 ? 7 : 9;
       layers += `<circle cx="${x}" cy="${y}" r="9.5" fill="${fill}" stroke="white" stroke-width="1.4"/>`;
       layers += `<text x="${x}" y="${y + 3}" text-anchor="middle" fill="white" font-family="IBM Plex Mono" font-size="${degreeFont}">${degree}</text>`;
       if (options.showNoteNames && tone && tone.noteName) {
@@ -1256,10 +1336,11 @@ function playScaleRun(ctx, frequencies, startTime, options = {}) {
   });
 }
 
-async function playChordPreview(chordSymbol, moduleId) {
+async function playChordPreview(chordSymbol, moduleId, options = {}) {
   const ctx = await getAudioContext();
   const zone = moduleZone(moduleId);
-  const notes = chordFrequenciesFromSymbol(chordSymbol, zone);
+  const includeFifth = options.includeFifth === true;
+  const notes = chordFrequenciesFromSymbol(chordSymbol, zone, { includeFifth });
   if (!notes.length) return;
   playGuitarStrum(ctx, notes, ctx.currentTime, {
     strumGap: 0.028,
@@ -1527,7 +1608,8 @@ function scheduleCompingChord(time, chordSymbol, beatInBar) {
   if (beatInBar !== 1 && beatInBar !== 3) return;
   const ctx = backingTrackState.audioCtx;
   const zone = moduleZone(backingTrackState.moduleId);
-  const notes = chordFrequenciesFromSymbol(chordSymbol, zone);
+  const includeFifth = moduleIncludeFifth(backingTrackState.moduleId);
+  const notes = chordFrequenciesFromSymbol(chordSymbol, zone, { includeFifth });
   if (!notes.length) return;
 
   playGuitarStrum(ctx, notes, time, {
@@ -1675,6 +1757,8 @@ function qualitySummary(quality) {
   if (quality === "maj7") return { label: "Major 7", formula: "1 3 7" };
   if (quality === "m7") return { label: "Minor 7", formula: "1 b3 b7" };
   if (quality === "dom7") return { label: "Dominant 7", formula: "1 3 b7" };
+  if (quality === "m7b5") return { label: "Minor 7b5", formula: "1 b3 b5 b7" };
+  if (quality === "dim7") return { label: "Diminished 7", formula: "1 b3 b5 bb7" };
   return { label: "Chord", formula: "1 3 7" };
 }
 
@@ -1703,9 +1787,10 @@ function voicingHasDegree(voicing, degree) {
 function displayChordSymbol(root, quality, includeFifth, extension) {
   const base = chordSymbolFromRootQuality(root, quality);
   const extras = [];
-  if (includeFifth) extras.push("5");
+  const allowNaturalFifth = quality !== "m7b5" && quality !== "dim7";
+  if (includeFifth && allowNaturalFifth) extras.push("5");
   if (extension && extension !== "none") extras.push(extension);
-  return extras.length ? `${base}(${extras.join(",")})` : base;
+  return extras.length ? base + "(" + extras.join(",") + ")" : base;
 }
 
 function renderTutorialShellCard(root, quality, rootString, zone) {
@@ -1729,7 +1814,7 @@ function renderTutorialShellCard(root, quality, rootString, zone) {
         >🔈</button>
       </div>
       ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
-      <p class="tutorial-card-copy">${summary.label} shell (${summary.formula})</p>
+      <p class="tutorial-card-copy">${summary.label} (${summary.formula})</p>
     </article>
   `;
 }
@@ -1772,18 +1857,20 @@ function renderTutorialBuilderCard(root, quality, rootString, zone, includeFifth
 }
 
 function renderTutorialModule() {
-  const root6Cards = ["maj7", "m7", "dom7"]
+  const root6Cards = ["maj7", "dom7", "m7", "m7b5", "dim7"]
     .map((quality) => renderTutorialShellCard("C", quality, 6, "low"))
     .join("");
 
-  const root5Cards = ["maj7", "m7", "dom7"]
+  const root5Cards = ["maj7", "dom7", "m7", "m7b5", "dim7"]
     .map((quality) => renderTutorialShellCard("C", quality, 5, "mid"))
     .join("");
 
   const builderTopRow = [
     { quality: "maj7", rootString: 6, zone: "low" },
-    { quality: "m7", rootString: 6, zone: "low" },
     { quality: "dom7", rootString: 6, zone: "low" },
+    { quality: "m7", rootString: 6, zone: "low" },
+    { quality: "m7b5", rootString: 6, zone: "low" },
+    { quality: "dim7", rootString: 6, zone: "low" },
   ]
     .map(({ quality, rootString, zone }) =>
       renderTutorialBuilderCard(
@@ -1798,8 +1885,10 @@ function renderTutorialModule() {
     .join("");
   const builderBottomRow = [
     { quality: "maj7", rootString: 5, zone: "mid" },
-    { quality: "m7", rootString: 5, zone: "mid" },
     { quality: "dom7", rootString: 5, zone: "mid" },
+    { quality: "m7", rootString: 5, zone: "mid" },
+    { quality: "m7b5", rootString: 5, zone: "mid" },
+    { quality: "dim7", rootString: 5, zone: "mid" },
   ]
     .map(({ quality, rootString, zone }) =>
       renderTutorialBuilderCard(
@@ -1819,7 +1908,7 @@ function renderTutorialModule() {
 
   return `
     <section class="lesson-block">
-      <h3>Interactive Builder</h3>
+      <h3>Step 1 Tutorial: Chord Construction</h3>
       <div class="builder-controls">
         <div class="builder-root-wrap">
           <span>Root</span>
@@ -1883,12 +1972,12 @@ function renderTutorialModule() {
     </section>
 
     <section class="lesson-block">
-      <h3>6th-String Root Shell Examples (C Root)</h3>
+      <h3>6th-String Root Chord Construction Examples (C Root)</h3>
       <div class="diagram-grid tutorial-grid">${root6Cards}</div>
     </section>
 
     <section class="lesson-block">
-      <h3>5th-String Root Shell Examples (C Root)</h3>
+      <h3>5th-String Root Chord Construction Examples (C Root)</h3>
       <div class="diagram-grid tutorial-grid">${root5Cards}</div>
     </section>
   `;
@@ -2214,6 +2303,100 @@ function wireScaleModule() {
   wirePlayAlongModule();
 }
 
+function renderMajorScaleModule() {
+  const key = majorScaleStepState.key;
+  const zone = majorScaleStepState.zone;
+  const degreeChords = majorScaleChordsForKey(key);
+
+  const tableRows = degreeChords
+    .map((item) => "<tr><td>" + item.roman + "</td><td>" + item.chord + "</td></tr>")
+    .join("");
+
+  const diagramsMarkup = degreeChords
+    .map((item) => {
+      const voicing = buildVoicing(item.chord, zone, { includeFifth: true });
+      if (!voicing) {
+        return (
+          '<article class="chord-card">' +
+          "<h4>" + item.roman + " - " + item.chord + "</h4>" +
+          '<p class="tutorial-card-copy">No voicing found in this zone.</p>' +
+          "</article>"
+        );
+      }
+
+      return (
+        '<article class="chord-card">' +
+        '<div class="chord-card-top">' +
+        "<h4>" + item.roman + " - " + item.chord + "</h4>" +
+        '<button type="button" class="play-chord-btn" data-chord="' +
+        item.chord +
+        '" data-module="major_scale_harmony" data-include-fifth="1" aria-label="Play ' +
+        item.chord +
+        '">🔈</button>' +
+        "</div>" +
+        renderDiagram(voicing, { showNoteNames: uiState.showNoteNames }) +
+        "</article>"
+      );
+    })
+    .join("");
+
+  const keyButtons = ROOT_NOTE_OPTIONS.map((note) => {
+    const active = key === note;
+    return (
+      '<button type="button" class="root-choice ' +
+      (active ? "active" : "") +
+      '" data-major-key-option="' +
+      note +
+      '" aria-pressed="' +
+      (active ? "true" : "false") +
+      '">' +
+      note +
+      "</button>"
+    );
+  }).join("");
+
+  return (
+    '<section class="lesson-block">' +
+    "<h3>Step 4: Major Scales</h3>" +
+    '<div class="builder-controls">' +
+    '<div class="builder-root-wrap">' +
+    "<span>Key</span>" +
+    '<div class="builder-root-group" role="radiogroup" aria-label="Major scale key">' +
+    keyButtons +
+    "</div>" +
+    "</div>" +
+    "</div>" +
+    '<p class="tutorial-card-copy">Diatonic seventh chords in <span class="chip">' +
+    key +
+    " major</span>.</p>" +
+    '<table class="formula-table major-scale-table">' +
+    "<thead><tr><th>Roman</th><th>Chord</th></tr></thead>" +
+    "<tbody>" +
+    tableRows +
+    "</tbody>" +
+    "</table>" +
+    "</section>" +
+    '<section class="lesson-block">' +
+    "<h3>" + key + " Major Jazz Scale Chord Fingerings</h3>" +
+    '<div class="diagram-grid">' +
+    diagramsMarkup +
+    "</div>" +
+    "</section>"
+  );
+}
+
+function wireMajorScaleModule() {
+  lessonContent.querySelectorAll("[data-major-key-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      majorScaleStepState.key = button.dataset.majorKeyOption || "C";
+      renderLesson();
+    });
+  });
+
+  wireChordPreviewButtons();
+}
+
+
 function wirePlayAlongModule() {
   const progressionSelect = document.getElementById("playAlongProgressionSelect");
   const tempoInput = document.getElementById("playAlongTempoInput");
@@ -2326,6 +2509,7 @@ function renderProgressionModule(module) {
   const uniqueChords = uniqueChordsInOrder(bars);
   const tempoDefault = 80;
   const selectedZone = moduleZone(module.id);
+  const includeFifth = moduleIncludeFifth(module.id);
 
   const barsMarkup = bars
     .map(
@@ -2336,13 +2520,13 @@ function renderProgressionModule(module) {
 
   const diagramsMarkup = uniqueChords
     .map((chord) => {
-      const voicing = buildVoicing(chord, selectedZone);
+      const voicing = buildVoicing(chord, selectedZone, { includeFifth });
       if (!voicing) return "";
       return `
         <article class="chord-card">
           <div class="chord-card-top">
             <h4>${chord}</h4>
-            <button type="button" class="play-chord-btn" data-chord="${chord}" data-module="${module.id}" aria-label="Play ${chord}">🔈</button>
+            <button type="button" class="play-chord-btn" data-chord="${chord}" data-module="${module.id}" data-include-fifth="${includeFifth ? "1" : "0"}" aria-label="Play ${chord}">🔈</button>
           </div>
           ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
         </article>
@@ -2381,6 +2565,12 @@ function renderProgressionModule(module) {
 
     <section class="lesson-block">
       <h3>Chord Fingerings For This Progression</h3>
+      <div class="fingering-controls">
+        <label>
+          <span>Add 5th</span>
+          <input id="progressionIncludeFifth-${module.id}" type="checkbox" ${includeFifth ? "checked" : ""}/>
+        </label>
+      </div>
       <div class="diagram-grid">${diagramsMarkup}</div>
     </section>
   `;
@@ -2388,7 +2578,8 @@ function renderProgressionModule(module) {
 function wireChordPreviewButtons() {
   lessonContent.querySelectorAll(".play-chord-btn").forEach((button) => {
     button.addEventListener("click", async () => {
-      await playChordPreview(button.dataset.chord || "", button.dataset.module || activeModuleId);
+      const includeFifth = button.dataset.includeFifth === "1";
+      await playChordPreview(button.dataset.chord || "", button.dataset.module || activeModuleId, { includeFifth });
     });
   });
 }
@@ -2396,12 +2587,21 @@ function wireChordPreviewButtons() {
 function wirePracticePlayer(module, data) {
   const transposeButtons = lessonContent.querySelectorAll("[data-transpose-option]");
   const tempoInput = document.getElementById(`tempoInput-${module.id}`);
+  const includeFifthInput = document.getElementById(`progressionIncludeFifth-${module.id}`);
   const startBtn = document.getElementById(`startTrackBtn-${module.id}`);
   const stopBtn = document.getElementById(`stopTrackBtn-${module.id}`);
   const statusEl = document.getElementById(`trackStatus-${module.id}`);
   const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
 
   if (!tempoInput || !startBtn || !stopBtn || !statusEl) return;
+
+  if (includeFifthInput) {
+    includeFifthInput.addEventListener("change", () => {
+      includeFifthSelectionByModule[module.id] = includeFifthInput.checked;
+      stopBackingTrack();
+      renderLesson();
+    });
+  }
 
   transposeButtons.forEach((button) => {
     button.addEventListener("click", () => {
@@ -2453,6 +2653,12 @@ function renderLesson() {
     return;
   }
 
+  if (module.kind === "major_scales") {
+    lessonContent.innerHTML = renderMajorScaleModule();
+    wireMajorScaleModule();
+    return;
+  }
+
   lessonContent.innerHTML = renderProgressionModule(module);
   wireChordPreviewButtons();
   wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
@@ -2462,6 +2668,7 @@ function renderModuleNav() {
   const step1Module = MODULES.find((module) => module.kind === "tutorial");
   const step2Modules = PROGRESSION_MODULES;
   const step3Module = MODULES.find((module) => module.kind === "scales");
+  const step4Module = MODULES.find((module) => module.kind === "major_scales");
 
   const step2Markup = step2Modules
     .map((module, idx) => {
@@ -2490,6 +2697,12 @@ function renderModuleNav() {
         <strong>${step3Module.title}</strong>
       </button>
     </li>
+    <li class="nav-section">Step 4: Major Scales</li>
+    <li>
+      <button type="button" data-module-id="${step4Module.id}">
+        <strong>${step4Module.title}</strong>
+      </button>
+    </li>
   `;
 
   moduleNav.querySelectorAll("button").forEach((button) => {
@@ -2510,14 +2723,17 @@ function setActiveModule(moduleId) {
   safeSetStoredModule(activeModuleId);
 
   if (module.kind === "tutorial") {
-    stageModuleLabel.textContent = "Step 1 of 3";
+    stageModuleLabel.textContent = "Step 1 of 4";
     stageTitle.textContent = module.title;
   } else if (module.kind === "progression") {
     const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
-    stageModuleLabel.textContent = `Step 2 of 3 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
+    stageModuleLabel.textContent = `Step 2 of 4 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
+    stageTitle.textContent = module.title;
+  } else if (module.kind === "scales") {
+    stageModuleLabel.textContent = "Step 3 of 4 - Scales";
     stageTitle.textContent = module.title;
   } else {
-    stageModuleLabel.textContent = "Step 3 of 3 - Scales";
+    stageModuleLabel.textContent = "Step 4 of 4 - Major Scales";
     stageTitle.textContent = module.title;
   }
 

@@ -532,8 +532,18 @@ button {
   background: color-mix(in oklab, var(--accent-3), white 35%);
 }
 
+.major-scale-table td:first-child {
+  width: 34%;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 600;
+}
+
+.major-scale-table td:last-child {
+  font-size: 1.05rem;
+}
+
 .tutorial-grid {
-  grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .tutorial-card-copy {
@@ -643,7 +653,7 @@ button {
 }
 
 .builder-fixed-grid {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
 .examples-divider {
