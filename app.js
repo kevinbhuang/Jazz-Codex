@@ -86,6 +86,7 @@ const scaleModuleState = {
 const majorScaleStepState = {
   key: "C",
   zone: "low",
+  includeFifth: true,
 };
 
 const playAlongState = {
@@ -2306,15 +2307,15 @@ function wireScaleModule() {
 function renderMajorScaleModule() {
   const key = majorScaleStepState.key;
   const zone = majorScaleStepState.zone;
+  const includeFifth = majorScaleStepState.includeFifth === true;
   const degreeChords = majorScaleChordsForKey(key);
 
-  const tableRows = degreeChords
-    .map((item) => "<tr><td>" + item.roman + "</td><td>" + item.chord + "</td></tr>")
-    .join("");
+  const romanCells = degreeChords.map((item) => "<td>" + item.roman + "</td>").join("");
+  const chordCells = degreeChords.map((item) => "<td>" + item.chord + "</td>").join("");
 
   const diagramsMarkup = degreeChords
     .map((item) => {
-      const voicing = buildVoicing(item.chord, zone, { includeFifth: true });
+      const voicing = buildVoicing(item.chord, zone, { includeFifth });
       if (!voicing) {
         return (
           '<article class="chord-card">' +
@@ -2330,7 +2331,9 @@ function renderMajorScaleModule() {
         "<h4>" + item.roman + " - " + item.chord + "</h4>" +
         '<button type="button" class="play-chord-btn" data-chord="' +
         item.chord +
-        '" data-module="major_scale_harmony" data-include-fifth="1" aria-label="Play ' +
+        '" data-module="major_scale_harmony" data-include-fifth="' +
+        (includeFifth ? "1" : "0") +
+        '" aria-label="Play ' +
         item.chord +
         '">🔈</button>' +
         "</div>" +
@@ -2366,15 +2369,29 @@ function renderMajorScaleModule() {
     "</div>" +
     "</div>" +
     "</div>" +
+    '<div class="fingering-controls major-scale-fingering-controls">' +
+    "<label>" +
+    "<span>Add 5th</span>" +
+    '<input id="majorScaleIncludeFifthToggle" type="checkbox" ' +
+    (includeFifth ? "checked" : "") +
+    "/>" +
+    "</label>" +
+    "</div>" +
     '<p class="tutorial-card-copy">Diatonic seventh chords in <span class="chip">' +
     key +
     " major</span>.</p>" +
+    '<div class="table-scroll-wrap">' +
     '<table class="formula-table major-scale-table">' +
-    "<thead><tr><th>Roman</th><th>Chord</th></tr></thead>" +
     "<tbody>" +
-    tableRows +
+    "<tr><th>Degree</th>" +
+    romanCells +
+    "</tr>" +
+    "<tr><th>Chord</th>" +
+    chordCells +
+    "</tr>" +
     "</tbody>" +
     "</table>" +
+    "</div>" +
     "</section>" +
     '<section class="lesson-block">' +
     "<h3>" + key + " Major Jazz Scale Chord Fingerings</h3>" +
@@ -2392,6 +2409,14 @@ function wireMajorScaleModule() {
       renderLesson();
     });
   });
+
+  const includeFifthToggle = document.getElementById("majorScaleIncludeFifthToggle");
+  if (includeFifthToggle) {
+    includeFifthToggle.addEventListener("change", () => {
+      majorScaleStepState.includeFifth = includeFifthToggle.checked;
+      renderLesson();
+    });
+  }
 
   wireChordPreviewButtons();
 }

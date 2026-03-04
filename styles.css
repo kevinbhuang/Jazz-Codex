@@ -532,14 +532,50 @@ button {
   background: color-mix(in oklab, var(--accent-3), white 35%);
 }
 
-.major-scale-table td:first-child {
-  width: 34%;
-  font-family: "IBM Plex Mono", monospace;
-  font-weight: 600;
+.table-scroll-wrap {
+  overflow-x: auto;
+  margin-top: 0.35rem;
 }
 
-.major-scale-table td:last-child {
-  font-size: 1.05rem;
+.major-scale-table {
+  width: max-content;
+  min-width: 100%;
+  font-size: 0.84rem;
+}
+
+.major-scale-table th,
+.major-scale-table td {
+  padding: 0.28rem 0.4rem;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.major-scale-table th:first-child {
+  min-width: 4.8rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 600;
+  text-align: left;
+}
+
+.major-scale-table tr:first-child td {
+  font-family: "IBM Plex Mono", monospace;
+  font-weight: 600;
+  min-width: 2.9rem;
+}
+
+.major-scale-table tr:last-child td {
+  font-size: 0.93rem;
+}
+
+.major-scale-fingering-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.88rem;
+}
+
+.major-scale-fingering-controls input[type="checkbox"] {
+  accent-color: var(--accent);
 }
 
 .tutorial-grid {
