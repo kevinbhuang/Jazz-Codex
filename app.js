@@ -81,6 +81,7 @@ const scaleModuleState = {
   scaleId: "ionian",
   applyModuleId: "major_iivi",
   applyKey: "C",
+  chordTonesOnly: true,
 };
 
 const majorScaleStepState = {
@@ -584,10 +585,14 @@ function recommendedScaleIdForChord(chordSymbol) {
   return recommendedScaleIdForQuality(parsed.quality);
 }
 
-function scalePointsForZone(root, scaleId, zone) {
+function scalePointsForZone(root, scaleId, zone, fretRange = null) {
   const rootIndex = noteToIndex(root);
   const scale = SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian;
-  const [minFret, maxFret] = ZONES[zone];
+  const [zoneMinFret, zoneMaxFret] = ZONES[zone];
+  const minFret =
+    Array.isArray(fretRange) && Number.isInteger(fretRange[0]) ? fretRange[0] : zoneMinFret;
+  const maxFret =
+    Array.isArray(fretRange) && Number.isInteger(fretRange[1]) ? fretRange[1] : zoneMaxFret;
   const points = [];
   if (rootIndex < 0) return points;
 
@@ -608,6 +613,11 @@ function scalePointsForZone(root, scaleId, zone) {
     }
   }
   return points;
+}
+
+function chordToneDegreesForQuality(quality) {
+  const info = CHORD_QUALITIES[quality];
+  return info && Array.isArray(info.formula) ? info.formula : ["1", "3", "5", "7"];
 }
 
 function getTemplateForRootString(quality, rootString) {
@@ -1139,8 +1149,13 @@ function renderDiagram(voicing, options = {}) {
 }
 
 function renderScaleDiagram(root, scaleId, zone, options = {}) {
-  const points = scalePointsForZone(root, scaleId, zone);
-  const [baseFret, maxFret] = ZONES[zone];
+  const [zoneBaseFret] = ZONES[zone];
+  const fretSpan = Number.isInteger(options.fretSpan) && options.fretSpan > 0 ? options.fretSpan : null;
+  const baseFret = Number.isInteger(options.baseFret) ? options.baseFret : zoneBaseFret;
+  const maxFret = fretSpan ? Math.min(16, baseFret + fretSpan - 1) : ZONES[zone][1];
+  const points = scalePointsForZone(root, scaleId, zone, [baseFret, maxFret]);
+  const onlyDegrees = Array.isArray(options.onlyDegrees) ? new Set(options.onlyDegrees) : null;
+  const visiblePoints = onlyDegrees ? points.filter((point) => onlyDegrees.has(point.degree)) : points;
   const fretCount = maxFret - baseFret + 1;
   const width = 334;
   const height = 236;
@@ -1171,8 +1186,9 @@ function renderScaleDiagram(root, scaleId, zone, options = {}) {
     layers += `<line x1="${left}" y1="${y}" x2="${left + gridWidth}" y2="${y}" stroke="#1f2a30" stroke-width="${strokeWidth}"/>`;
   }
 
-  points.forEach((point) => {
-    const row = 6 - point.stringNumber;
+  visiblePoints.forEach((point) => {
+    // Match chord diagrams: high E on top, low E on bottom.
+    const row = point.stringNumber - 1;
     const x = left + (point.fret - baseFret + 0.5) * fretGap;
     const y = top + row * stringGap;
     const fill = markerFill(point.degree, point.isRoot);
@@ -2071,6 +2087,14 @@ function wireTutorialModule() {
 
 function renderScaleModule() {
   const scale = SCALE_LIBRARY[scaleModuleState.scaleId] || SCALE_LIBRARY.ionian;
+  const chordTonesOnly = scaleModuleState.chordTonesOnly === true;
+  const step3ScaleFretSpan = 7;
+  const selectedToneDegrees = chordToneDegreesForQuality(scale.targetQuality);
+  const selectedDiagramOptions = {
+    showNoteNames: uiState.showNoteNames,
+    onlyDegrees: chordTonesOnly ? selectedToneDegrees : null,
+    fretSpan: step3ScaleFretSpan,
+  };
   const applyProgression = PROGRESSION_MODULES.find((module) => module.id === scaleModuleState.applyModuleId) || PROGRESSION_MODULES[0];
   const applyData = applyProgression ? PROGRESSION_DATA[applyProgression.id] : null;
   const applyBars = applyData
@@ -2092,7 +2116,13 @@ function renderScaleModule() {
         <article class="chord-card">
           <h4>Bar ${idx + 1}: ${chord}</h4>
           <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
-          ${renderScaleDiagram(root, scaleId, "low", { showNoteNames: uiState.showNoteNames })}
+          ${renderScaleDiagram(root, scaleId, "low", {
+            showNoteNames: uiState.showNoteNames,
+            onlyDegrees: chordTonesOnly
+              ? chordToneDegreesForQuality((SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian).targetQuality)
+              : null,
+            fretSpan: step3ScaleFretSpan,
+          })}
         </article>
       `;
     })
@@ -2124,6 +2154,12 @@ function renderScaleModule() {
         </div>
       </div>
       <p><strong>Formula:</strong> ${scale.formula} <span class="chip">${scale.targetLabel}</span></p>
+      <div class="fingering-controls">
+        <label>
+          <input data-scale-chord-tones-only-toggle="1" type="checkbox" ${chordTonesOnly ? "checked" : ""}/>
+          Just show chord tones
+        </label>
+      </div>
       <div class="player-controls">
         <button type="button" class="start-track-btn" id="playScaleLowBtn">Play Jazz Scale (Low Zone)</button>
         <button type="button" class="start-track-btn" id="playScaleMidBtn">Play Jazz Scale (Mid Zone)</button>
@@ -2132,11 +2168,11 @@ function renderScaleModule() {
       <div class="diagram-grid">
         <article class="chord-card">
           <h4>Low Zone</h4>
-          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "low", { showNoteNames: uiState.showNoteNames })}
+          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "low", selectedDiagramOptions)}
         </article>
         <article class="chord-card">
           <h4>Mid Zone</h4>
-          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "mid", { showNoteNames: uiState.showNoteNames })}
+          ${renderScaleDiagram(scaleModuleState.root, scaleModuleState.scaleId, "mid", selectedDiagramOptions)}
         </article>
       </div>
     </section>
@@ -2160,6 +2196,12 @@ function renderScaleModule() {
           ).join("")}
         </div>
       </div>
+      <div class="fingering-controls">
+        <label>
+          <input data-scale-chord-tones-only-toggle="1" type="checkbox" ${chordTonesOnly ? "checked" : ""}/>
+          Just show chord tones
+        </label>
+      </div>
       <p class="tutorial-card-copy">Bars highlighted in gold match your currently selected scale.</p>
       <div class="bar-grid">${applyMarkup}</div>
       <div class="diagram-grid tutorial-grid apply-scale-grid">${applyScaleDiagrams}</div>
@@ -2168,6 +2210,12 @@ function renderScaleModule() {
     <section class="lesson-block">
       <h3>Play-Along Loop</h3>
       <p>Guitar comping loop with optional jazz drums, swing feel, and walking bass.</p>
+      <div class="fingering-controls">
+        <label>
+          <input data-scale-chord-tones-only-toggle="1" type="checkbox" ${chordTonesOnly ? "checked" : ""}/>
+          Just show chord tones
+        </label>
+      </div>
       <div class="practice-player">
         <label>
           Progression
@@ -2249,7 +2297,13 @@ function renderScaleModule() {
             <article class="chord-card">
               <h4>Bar ${idx + 1}: ${chord}</h4>
               <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
-              ${renderScaleDiagram(root, scaleId, "low", { showNoteNames: uiState.showNoteNames })}
+              ${renderScaleDiagram(root, scaleId, "low", {
+                showNoteNames: uiState.showNoteNames,
+                onlyDegrees: chordTonesOnly
+                  ? chordToneDegreesForQuality((SCALE_LIBRARY[scaleId] || SCALE_LIBRARY.ionian).targetQuality)
+                  : null,
+                fretSpan: step3ScaleFretSpan,
+              })}
             </article>
           `;
         })
@@ -2289,6 +2343,13 @@ function wireScaleModule() {
 
   const playLowBtn = document.getElementById("playScaleLowBtn");
   const playMidBtn = document.getElementById("playScaleMidBtn");
+
+  lessonContent.querySelectorAll("[data-scale-chord-tones-only-toggle]").forEach((toggle) => {
+    toggle.addEventListener("change", () => {
+      scaleModuleState.chordTonesOnly = toggle.checked;
+      renderLesson();
+    });
+  });
 
   if (playLowBtn) {
     playLowBtn.addEventListener("click", async () => {
