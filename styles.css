@@ -49,6 +49,7 @@ body {
   background: color-mix(in oklab, var(--panel), white 25%);
   box-shadow: 0 14px 26px rgba(0, 0, 0, 0.07);
   padding: 0.8rem 1rem;
+  position: relative;
 }
 
 .mega-title h1 {
@@ -69,6 +70,144 @@ body {
   justify-content: center;
   padding: 0.3rem 0.75rem;
   white-space: nowrap;
+}
+
+.title-actions {
+  display: inline-flex;
+  gap: 0.45rem;
+  align-items: center;
+  position: relative;
+}
+
+.mini-tuner-toggle {
+  min-height: 2.3rem;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: color-mix(in oklab, var(--accent-3), white 15%);
+  font-size: 0.85rem;
+  padding: 0.25rem 0.65rem;
+  white-space: nowrap;
+}
+
+.mini-tuner-panel {
+  position: absolute;
+  top: calc(100% + 0.45rem);
+  right: 0;
+  width: min(320px, 92vw);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: 0 12px 26px rgba(0, 0, 0, 0.15);
+  padding: 0.55rem;
+  z-index: 30;
+}
+
+.mini-tuner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.mini-tuner-header strong {
+  font-size: 0.9rem;
+}
+
+.mini-tuner-header button {
+  padding: 0.3rem 0.5rem;
+  font-size: 0.78rem;
+}
+
+.mini-tuner-status {
+  margin: 0.15rem 0 0.45rem;
+  font-size: 0.8rem;
+  color: var(--muted);
+}
+
+.mini-tuner-strings {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.35rem;
+  margin-bottom: 0.45rem;
+}
+
+.mini-tuner-strings button {
+  padding: 0.35rem 0.4rem;
+  font-size: 0.8rem;
+}
+
+.mini-tuner-controls {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.35rem;
+}
+
+.mini-tuner-controls button {
+  padding: 0.35rem 0.45rem;
+  font-size: 0.78rem;
+}
+
+.mini-tuner-meter {
+  margin-top: 0.5rem;
+}
+
+.mini-tuner-meter-track {
+  position: relative;
+  height: 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: linear-gradient(
+    90deg,
+    #cb2b2b 0%,
+    #e5652e 22%,
+    #4cae4f 50%,
+    #e5652e 78%,
+    #cb2b2b 100%
+  );
+}
+
+.mini-tuner-meter-center {
+  position: relative;
+  width: 2px;
+  height: 12px;
+  margin: -11px auto 0;
+  background: #1f2a30;
+}
+
+.mini-tuner-needle {
+  position: relative;
+  width: 2px;
+  height: 16px;
+  background: #1f2a30;
+  margin: -14px auto 0;
+  transform: translateX(var(--needle-offset, 0px));
+  transition: transform 90ms linear;
+}
+
+.mini-tuner-needle::before {
+  content: "";
+  position: absolute;
+  top: -6px;
+  left: -4px;
+  border-left: 5px solid transparent;
+  border-right: 5px solid transparent;
+  border-bottom: 7px solid #1f2a30;
+}
+
+.mini-tuner-meter-labels {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 0.15rem;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.66rem;
+  color: var(--muted);
+}
+
+.mini-tuner-readout {
+  margin: 0.45rem 0 0;
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.8rem;
 }
 
 .emoji-rain-item {

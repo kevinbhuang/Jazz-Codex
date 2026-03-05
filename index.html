@@ -15,7 +15,40 @@
     <section class="mega-title">
       <div class="mega-title-inner">
         <h1>Kevin's Super Ultra Custom Jazz Guitar Trainer - Beta 2.0 🎸</h1>
-        <button id="easterEggGuitarBtn" type="button" class="easter-egg-guitar" aria-label="Trigger guitar easter egg">click me 🎸</button>
+        <div class="title-actions">
+          <button id="tunerToggleBtn" type="button" class="mini-tuner-toggle" aria-expanded="false" aria-controls="miniTunerPanel" aria-label="Open mini guitar tuner">Tuner</button>
+          <button id="easterEggGuitarBtn" type="button" class="easter-egg-guitar" aria-label="Trigger guitar easter egg">click me 🎸</button>
+          <section id="miniTunerPanel" class="mini-tuner-panel" hidden>
+            <div class="mini-tuner-header">
+              <strong>Mini Guitar Tuner</strong>
+              <button id="tunerCloseBtn" type="button" aria-label="Close tuner">Close</button>
+            </div>
+            <p id="tunerStatus" class="mini-tuner-status">Tap a string for reference tone or start mic.</p>
+            <div class="mini-tuner-strings">
+              <button type="button" data-tuner-note="E2" data-tuner-frequency="82.41">E2</button>
+              <button type="button" data-tuner-note="A2" data-tuner-frequency="110.00">A2</button>
+              <button type="button" data-tuner-note="D3" data-tuner-frequency="146.83">D3</button>
+              <button type="button" data-tuner-note="G3" data-tuner-frequency="196.00">G3</button>
+              <button type="button" data-tuner-note="B3" data-tuner-frequency="246.94">B3</button>
+              <button type="button" data-tuner-note="E4" data-tuner-frequency="329.63">E4</button>
+            </div>
+            <div class="mini-tuner-controls">
+              <button id="tunerMicStartBtn" type="button">Start Mic</button>
+              <button id="tunerMicStopBtn" type="button" disabled>Stop Mic</button>
+            </div>
+            <div class="mini-tuner-meter" aria-hidden="true">
+              <div class="mini-tuner-meter-track"></div>
+              <div class="mini-tuner-meter-center"></div>
+              <div id="tunerNeedle" class="mini-tuner-needle"></div>
+              <div class="mini-tuner-meter-labels">
+                <span>-50</span>
+                <span>0</span>
+                <span>+50</span>
+              </div>
+            </div>
+            <p id="tunerPitchReadout" class="mini-tuner-readout">Mic: --</p>
+          </section>
+        </div>
       </div>
     </section>
 

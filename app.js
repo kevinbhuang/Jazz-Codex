@@ -20,6 +20,18 @@ const MODULES = [
     blurb: "Step 1: Learn 6th-string and 5th-string chord construction.",
   },
   {
+    id: "shell_chords_substep",
+    kind: "tutorial",
+    title: "Shell Chords",
+    blurb: "Step 1 sub-step: Keep 3rd/7th on D and G strings.",
+  },
+  {
+    id: "shell_diatonic_7ths",
+    kind: "tutorial",
+    title: "Shell Diatonic 7th Chords",
+    blurb: "Step 1 sub-step: Diatonic shell movement in one key.",
+  },
+  {
     id: "major_iivi",
     kind: "progression",
     step: "Progression 1",
@@ -72,8 +84,16 @@ const ROOT_NOTE_OPTIONS = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A",
 
 const tutorialBuilderState = {
   root: "C",
-  includeFifth: false,
+  includeFifth: true,
   extension: "none",
+};
+
+const shellBuilderState = {
+  root: "C",
+};
+
+const shellDiatonicState = {
+  key: "C",
 };
 
 const scaleModuleState = {
@@ -118,6 +138,7 @@ const uiState = {
 };
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
+const TUTORIAL_MODULES = MODULES.filter((module) => module.kind === "tutorial");
 
 const SCALE_LIBRARY = {
   ionian: {
@@ -425,6 +446,23 @@ const nextModuleBtn = document.getElementById("nextModuleBtn");
 const showNoteNamesToggle = document.getElementById("showNoteNamesToggle");
 const lessonContent = document.getElementById("lessonContent");
 const easterEggGuitarBtn = document.getElementById("easterEggGuitarBtn");
+const tunerToggleBtn = document.getElementById("tunerToggleBtn");
+const miniTunerPanel = document.getElementById("miniTunerPanel");
+const tunerCloseBtn = document.getElementById("tunerCloseBtn");
+const tunerStatus = document.getElementById("tunerStatus");
+const tunerPitchReadout = document.getElementById("tunerPitchReadout");
+const tunerNeedle = document.getElementById("tunerNeedle");
+const tunerMeterTrack = document.querySelector(".mini-tuner-meter-track");
+const tunerMicStartBtn = document.getElementById("tunerMicStartBtn");
+const tunerMicStopBtn = document.getElementById("tunerMicStopBtn");
+const tunerStringButtons = Array.from(document.querySelectorAll("[data-tuner-frequency]"));
+
+const tunerState = {
+  micStream: null,
+  micSource: null,
+  analyser: null,
+  rafId: null,
+};
 
 function safeGetStoredModule() {
   try {
@@ -1215,6 +1253,181 @@ function noteFrequency(note, octave) {
   return 440 * Math.pow(2, (midi - 69) / 12);
 }
 
+function setMiniTunerOpen(isOpen) {
+  if (!miniTunerPanel || !tunerToggleBtn) return;
+  miniTunerPanel.hidden = !isOpen;
+  tunerToggleBtn.setAttribute("aria-expanded", isOpen ? "true" : "false");
+  if (!isOpen) {
+    stopMiniTunerMic();
+  } else {
+    updateMiniTunerDial(null);
+  }
+}
+
+function updateMiniTunerDial(cents) {
+  if (!tunerNeedle) return;
+  if (!Number.isFinite(cents)) {
+    tunerNeedle.style.setProperty("--needle-offset", "0px");
+    return;
+  }
+  const safeCents = Math.max(-50, Math.min(50, cents));
+  const trackWidth = tunerMeterTrack ? tunerMeterTrack.getBoundingClientRect().width : 220;
+  const halfTravel = Math.max(30, trackWidth / 2 - 10);
+  const offsetPx = (safeCents / 50) * halfTravel;
+  tunerNeedle.style.setProperty("--needle-offset", `${offsetPx.toFixed(1)}px`);
+}
+
+async function playTunerReferenceTone(frequency, label) {
+  try {
+    const ctx = await getAudioContext();
+    const noteStack = [
+      { frequency: frequency, stringNumber: 6 },
+      { frequency: frequency * 1.5, stringNumber: 4 },
+      { frequency: frequency * 2, stringNumber: 2 },
+    ];
+    playGuitarStrum(ctx, noteStack, ctx.currentTime, {
+      strumGap: 0.02,
+      peakGain: 0.085,
+      releaseSeconds: 2.4,
+    });
+    if (tunerStatus) {
+      tunerStatus.textContent = `Playing ${label} (${frequency.toFixed(2)} Hz)`;
+    }
+  } catch (error) {
+    console.error(error);
+    if (tunerStatus) {
+      tunerStatus.textContent = "Unable to play reference tone.";
+    }
+  }
+}
+
+function detectPitchAutoCorrelate(buffer, sampleRate) {
+  const size = buffer.length;
+  let rms = 0;
+  for (let i = 0; i < size; i += 1) {
+    const value = buffer[i];
+    rms += value * value;
+  }
+  rms = Math.sqrt(rms / size);
+  if (rms < 0.01) return -1;
+
+  let bestOffset = -1;
+  let bestCorrelation = 0;
+  const minOffset = Math.floor(sampleRate / 500);
+  const maxOffset = Math.floor(sampleRate / 70);
+
+  for (let offset = minOffset; offset <= maxOffset; offset += 1) {
+    let correlation = 0;
+    const maxSamples = size - offset;
+    for (let i = 0; i < maxSamples; i += 1) {
+      correlation += Math.abs(buffer[i] - buffer[i + offset]);
+    }
+    correlation = 1 - correlation / maxSamples;
+
+    if (correlation > bestCorrelation) {
+      bestCorrelation = correlation;
+      bestOffset = offset;
+    }
+  }
+
+  if (bestCorrelation < 0.85 || bestOffset === -1) return -1;
+  return sampleRate / bestOffset;
+}
+
+function noteNameForFrequency(frequency) {
+  const midi = 69 + 12 * Math.log2(frequency / 440);
+  const nearestMidi = Math.round(midi);
+  const cents = Math.round((midi - nearestMidi) * 100);
+  const names = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+  const name = names[((nearestMidi % 12) + 12) % 12];
+  const octave = Math.floor(nearestMidi / 12) - 1;
+  return { name, octave, cents };
+}
+
+function updateMiniTunerPitch() {
+  if (!tunerState.analyser || !tunerPitchReadout) return;
+  const buffer = new Float32Array(tunerState.analyser.fftSize);
+  tunerState.analyser.getFloatTimeDomainData(buffer);
+  const frequency = detectPitchAutoCorrelate(buffer, tunerState.analyser.context.sampleRate);
+
+  if (frequency > 0) {
+    const note = noteNameForFrequency(frequency);
+    const tuning =
+      Math.abs(note.cents) <= 5 ? "in tune" : note.cents > 0 ? `${note.cents}c sharp` : `${Math.abs(note.cents)}c flat`;
+    tunerPitchReadout.textContent = `Mic: ${note.name}${note.octave} ${Math.round(frequency)} Hz (${tuning})`;
+    updateMiniTunerDial(note.cents);
+  } else {
+    tunerPitchReadout.textContent = "Mic: listening...";
+    updateMiniTunerDial(null);
+  }
+
+  tunerState.rafId = requestAnimationFrame(updateMiniTunerPitch);
+}
+
+async function startMiniTunerMic() {
+  if (tunerState.micStream) return;
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    if (tunerStatus) {
+      tunerStatus.textContent = "Microphone input is not supported in this browser.";
+    }
+    return;
+  }
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      audio: {
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+      },
+    });
+    const ctx = await getAudioContext();
+    const source = ctx.createMediaStreamSource(stream);
+    const analyser = ctx.createAnalyser();
+    analyser.fftSize = 2048;
+    source.connect(analyser);
+
+    tunerState.micStream = stream;
+    tunerState.micSource = source;
+    tunerState.analyser = analyser;
+
+    if (tunerMicStartBtn) tunerMicStartBtn.disabled = true;
+    if (tunerMicStopBtn) tunerMicStopBtn.disabled = false;
+    if (tunerStatus) tunerStatus.textContent = "Mic active: play one note at a time.";
+
+    updateMiniTunerPitch();
+  } catch (error) {
+    console.error(error);
+    if (tunerStatus) {
+      tunerStatus.textContent = "Microphone permission denied or unavailable.";
+    }
+  }
+}
+
+function stopMiniTunerMic() {
+  if (tunerState.rafId) {
+    cancelAnimationFrame(tunerState.rafId);
+    tunerState.rafId = null;
+  }
+  if (tunerState.micSource) {
+    tunerState.micSource.disconnect();
+    tunerState.micSource = null;
+  }
+  if (tunerState.analyser) {
+    tunerState.analyser.disconnect();
+    tunerState.analyser = null;
+  }
+  if (tunerState.micStream) {
+    tunerState.micStream.getTracks().forEach((track) => track.stop());
+    tunerState.micStream = null;
+  }
+
+  if (tunerMicStartBtn) tunerMicStartBtn.disabled = false;
+  if (tunerMicStopBtn) tunerMicStopBtn.disabled = true;
+  if (tunerPitchReadout) tunerPitchReadout.textContent = "Mic: --";
+  updateMiniTunerDial(null);
+}
+
 function voicingPlaybackNotes(voicing) {
   const notes = [];
   for (let idx = 0; idx < 6; idx += 1) {
@@ -1810,32 +2023,6 @@ function displayChordSymbol(root, quality, includeFifth, extension) {
   return extras.length ? base + "(" + extras.join(",") + ")" : base;
 }
 
-function renderTutorialShellCard(root, quality, rootString, zone) {
-  const chordSymbol = chordSymbolFromRootQuality(root, quality);
-  const voicing = buildVoicing(chordSymbol, zone, { preferredRootString: rootString });
-  if (!voicing) return "";
-
-  const summary = qualitySummary(quality);
-  return `
-    <article class="chord-card">
-      <div class="chord-card-top">
-        <h4>${chordSymbol}</h4>
-        <button
-          type="button"
-          class="play-tutorial-chord-btn"
-          data-root="${root}"
-          data-quality="${quality}"
-          data-root-string="${rootString}"
-          data-zone="${zone}"
-          aria-label="Play ${chordSymbol}"
-        >🔈</button>
-      </div>
-      ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
-      <p class="tutorial-card-copy">${summary.label} (${summary.formula})</p>
-    </article>
-  `;
-}
-
 function renderTutorialBuilderCard(root, quality, rootString, zone, includeFifth, extension) {
   const chordSymbol = chordSymbolFromRootQuality(root, quality);
   const labelSymbol = displayChordSymbol(root, quality, includeFifth, extension);
@@ -1873,15 +2060,122 @@ function renderTutorialBuilderCard(root, quality, rootString, zone, includeFifth
   `;
 }
 
+function guideToneIntervalsByQuality(quality) {
+  if (quality === "maj7") return { third: 4, seventh: 11 };
+  if (quality === "m7") return { third: 3, seventh: 10 };
+  if (quality === "dom7") return { third: 4, seventh: 10 };
+  if (quality === "m7b5") return { third: 3, seventh: 10 };
+  return null;
+}
+
+function buildShellGuideToneVoicing(chordSymbol, zone, rootString, options = {}) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed || (rootString !== 6 && rootString !== 5)) return null;
+  const rootIndex = noteToIndex(parsed.root);
+  if (rootIndex < 0) return null;
+
+  const guideTones = guideToneIntervalsByQuality(parsed.quality);
+  if (!guideTones) return null;
+
+  const includeFifth = options.includeFifth === true;
+  const [zoneMin, zoneMax] = ZONES[zone];
+  const zoneCenter = (zoneMin + zoneMax) / 2;
+  const dInterval = rootString === 6 ? guideTones.seventh : guideTones.third;
+  const gInterval = rootString === 6 ? guideTones.third : guideTones.seventh;
+
+  const pickFret = (stringNumber, interval, anchorFret) => {
+    const targetNoteIndex = (rootIndex + interval + 12) % 12;
+    const candidates = candidateFretsForStringNote(targetNoteIndex, stringNumber).filter((fret) => fret > 0);
+    const fret = chooseClosestFret(candidates, anchorFret);
+    if (!Number.isInteger(fret) || fret < 0 || fret > 16) return null;
+    return fret;
+  };
+
+  const rootFretCandidates = rootCandidates(parsed.root, rootString).filter((fret) => fret > 0);
+  if (!rootFretCandidates.length) return null;
+  let best = null;
+
+  rootFretCandidates.forEach((rootFret) => {
+    const dFret = pickFret(4, dInterval, rootFret);
+    const gFret = pickFret(3, gInterval, rootFret);
+    if (!Number.isInteger(dFret) || !Number.isInteger(gFret)) return;
+
+    const inZonePenalty = rootFret >= zoneMin && rootFret <= zoneMax ? 0 : 8;
+    const spreadPenalty = Math.abs(dFret - rootFret) + Math.abs(gFret - rootFret);
+    const centerPenalty = Math.abs(rootFret - zoneCenter);
+    const score = inZonePenalty + spreadPenalty * 0.2 + centerPenalty;
+
+    if (!best || score < best.score) {
+      best = { score, rootFret, dFret, gFret };
+    }
+  });
+
+  if (!best) return null;
+
+  const frets = ["x", "x", "x", "x", "x", "x"];
+  frets[6 - rootString] = best.rootFret;
+  frets[6 - 4] = best.dFret;
+  frets[6 - 3] = best.gFret;
+  if (includeFifth) {
+    const fifthFret = pickFret(2, 7, best.rootFret);
+    if (Number.isInteger(fifthFret)) {
+      frets[6 - 2] = fifthFret;
+    }
+  }
+
+  const tones = frets.map((fret, idx) => {
+    if (!Number.isInteger(fret)) return null;
+    const stringNumber = 6 - idx;
+    const noteIndex = (openNoteByString[stringNumber] + fret) % 12;
+    const interval = (noteIndex - rootIndex + 12) % 12;
+    return {
+      degree: intervalDegreeLabel(interval, parsed.quality),
+      noteName: noteFromIndex(noteIndex, parsed.root.includes("b")),
+      isRoot: interval === 0,
+    };
+  });
+
+  return {
+    chord: chordSymbol,
+    name: `Root-${rootString} shell`,
+    frets,
+    tones,
+    resolvedFingers: resolveFingerings(frets),
+  };
+}
+
+function renderTutorialShellBuilderCard(root, quality, rootString, zone, includeFifth) {
+  const chordSymbol = chordSymbolFromRootQuality(root, quality);
+  const voicing = buildShellGuideToneVoicing(chordSymbol, zone, rootString, { includeFifth });
+  if (!voicing) return "";
+
+  const summary = qualitySummary(quality);
+  const effectiveIncludeFifth = includeFifth && voicingHasDegree(voicing, "5");
+  const labelSymbol = displayChordSymbol(root, quality, effectiveIncludeFifth, "none");
+  const formula = tutorialFormulaWithOptions(summary.formula, effectiveIncludeFifth, "none");
+
+  return `
+    <article class="chord-card">
+      <div class="chord-card-top">
+        <h4>${labelSymbol}</h4>
+        <button
+          type="button"
+          class="play-tutorial-chord-btn"
+          data-root="${root}"
+          data-quality="${quality}"
+          data-root-string="${rootString}"
+          data-zone="${zone}"
+          data-include-fifth="${includeFifth ? "1" : "0"}"
+          aria-label="Play ${labelSymbol}"
+        >🔈</button>
+      </div>
+      ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
+      <p class="tutorial-card-copy">${summary.label} | Root on string ${rootString} | Formula: ${formula}</p>
+    </article>
+  `;
+}
+
 function renderTutorialModule() {
-  const root6Cards = ["maj7", "dom7", "m7", "m7b5", "dim7"]
-    .map((quality) => renderTutorialShellCard("C", quality, 6, "low"))
-    .join("");
-
-  const root5Cards = ["maj7", "dom7", "m7", "m7b5", "dim7"]
-    .map((quality) => renderTutorialShellCard("C", quality, 5, "mid"))
-    .join("");
-
   const builderTopRow = [
     { quality: "maj7", rootString: 6, zone: "low" },
     { quality: "dom7", rootString: 6, zone: "low" },
@@ -1983,21 +2277,181 @@ function renderTutorialModule() {
       <p class="tutorial-card-copy">Score: ${earTrainingState.score}/${earTrainingState.attempts}</p>
     </section>
 
-    <section class="examples-divider" aria-label="Examples section">
-      <h3>Reference Examples</h3>
-      <p>Static example voicings for C root.</p>
-    </section>
+  `;
+}
 
-    <section class="lesson-block">
-      <h3>6th-String Root Chord Construction Examples (C Root)</h3>
-      <div class="diagram-grid tutorial-grid">${root6Cards}</div>
-    </section>
+function renderShellChordsModule() {
+  const shellTopRow = [
+    { quality: "maj7", rootString: 6, zone: "low" },
+    { quality: "dom7", rootString: 6, zone: "low" },
+    { quality: "m7", rootString: 6, zone: "low" },
+  ]
+    .map(({ quality, rootString, zone }) =>
+      renderTutorialShellBuilderCard(
+        shellBuilderState.root,
+        quality,
+        rootString,
+        zone,
+        false
+      )
+    )
+    .join("");
+  const shellBottomRow = [
+    { quality: "maj7", rootString: 5, zone: "mid" },
+    { quality: "dom7", rootString: 5, zone: "mid" },
+    { quality: "m7", rootString: 5, zone: "mid" },
+  ]
+    .map(({ quality, rootString, zone }) =>
+      renderTutorialShellBuilderCard(
+        shellBuilderState.root,
+        quality,
+        rootString,
+        zone,
+        false
+      )
+    )
+    .join("");
 
+  return `
     <section class="lesson-block">
-      <h3>5th-String Root Chord Construction Examples (C Root)</h3>
-      <div class="diagram-grid tutorial-grid">${root5Cards}</div>
+      <h3>Sub-step: Shell Chords</h3>
+      <div class="builder-controls">
+        <div class="builder-root-wrap">
+          <span>Root</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Shell chord root note">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="root-choice ${shellBuilderState.root === note ? "active" : ""}" data-shell-root-option="${note}" aria-pressed="${shellBuilderState.root === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
+      </div>
+
+      <div class="builder-output">
+        <div class="builder-stack">
+          <h4 class="builder-row-label">6th-string root (3rd/7th fixed on D + G strings)</h4>
+          <div class="diagram-grid tutorial-grid">${shellTopRow || "<p>Unable to build top row voicings.</p>"}</div>
+          <h4 class="builder-row-label">5th-string root (3rd/7th fixed on D + G strings)</h4>
+          <div class="diagram-grid tutorial-grid">${shellBottomRow || "<p>Unable to build bottom row voicings.</p>"}</div>
+        </div>
+      </div>
     </section>
   `;
+}
+
+function renderShellDiatonicCard(item, rootString, zone, voicingOverride = null) {
+  const voicing = voicingOverride || buildShellGuideToneVoicing(item.chord, zone, rootString, { includeFifth: false });
+  if (!voicing) return "";
+
+  const summary = qualitySummary(item.quality);
+  return `
+    <article class="chord-card">
+      <div class="chord-card-top">
+        <h4>${item.roman} - ${item.chord}</h4>
+        <button
+          type="button"
+          class="play-tutorial-chord-btn"
+          data-root="${parseChordRoot(item.chord) || "C"}"
+          data-quality="${item.quality}"
+          data-root-string="${rootString}"
+          data-zone="${zone}"
+          data-include-fifth="0"
+          aria-label="Play ${item.chord}"
+        >🔈</button>
+      </div>
+      ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
+      <p class="tutorial-card-copy">${summary.label} | Root on string ${rootString} | 3/7 on D + G strings</p>
+    </article>
+  `;
+}
+
+function shellDiatonicCardsFromOrder(degreeChords, rootString, zone, degreeOrder) {
+  return degreeOrder
+    .map((degreeIndex) => {
+      const item = degreeChords[degreeIndex];
+      if (!item) return "";
+      const voicing = buildShellGuideToneVoicing(item.chord, zone, rootString, { includeFifth: false });
+      return voicing ? renderShellDiatonicCard(item, rootString, zone, voicing) : "";
+    })
+    .join("");
+}
+
+function renderShellDiatonicModule() {
+  const key = shellDiatonicState.key;
+  const degreeChords = majorScaleChordsForKey(key);
+  const romanCells = degreeChords.map((item) => "<td>" + item.roman + "</td>").join("");
+  const chordCells = degreeChords.map((item) => "<td>" + item.chord + "</td>").join("");
+  const keyButtons = ROOT_NOTE_OPTIONS.map((note) => {
+    const active = key === note;
+    return (
+      '<button type="button" class="root-choice ' +
+      (active ? "active" : "") +
+      '" data-shell-diatonic-key-option="' +
+      note +
+      '" aria-pressed="' +
+      (active ? "true" : "false") +
+      '">' +
+      note +
+      "</button>"
+    );
+  }).join("");
+
+  // Match the chord-flow layout from the reference sheet:
+  // 5th-string path: I ii iii IV V vi viiø I
+  // 6th-string path: IV V vi viiø I ii iii IV
+  const root5Order = [0, 1, 2, 3, 4, 5, 6, 0];
+  const root6Order = [3, 4, 5, 6, 0, 1, 2, 3];
+  const root6Cards = shellDiatonicCardsFromOrder(degreeChords, 6, "low", root6Order);
+  const root5Cards = shellDiatonicCardsFromOrder(degreeChords, 5, "mid", root5Order);
+
+  return `
+    <section class="lesson-block">
+      <h3>Step 1.3: Shell Diatonic 7th Chords</h3>
+      <div class="builder-controls">
+        <div class="builder-root-wrap">
+          <span>Key</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Shell diatonic key">
+            ${keyButtons}
+          </div>
+        </div>
+      </div>
+      <p class="tutorial-card-copy">Diatonic seventh chords in <span class="chip">${key} major</span>.</p>
+      <div class="table-scroll-wrap">
+        <table class="formula-table major-scale-table">
+          <tbody>
+            <tr><th>Degree</th>${romanCells}</tr>
+            <tr><th>Chord</th>${chordCells}</tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>6th-String Root Diatonic Path (IV -> IV)</h3>
+      <div class="diagram-grid tutorial-grid">${root6Cards || "<p>Unable to build 6th-string diatonic shells.</p>"}</div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>5th-String Root Diatonic Path (I -> I)</h3>
+      <div class="diagram-grid tutorial-grid">${root5Cards || "<p>Unable to build 5th-string diatonic shells.</p>"}</div>
+    </section>
+  `;
+}
+
+function wireTutorialChordPlayButtons() {
+  lessonContent.querySelectorAll(".play-tutorial-chord-btn").forEach((button) => {
+    button.addEventListener("click", async () => {
+      const root = button.dataset.root || "C";
+      const quality = button.dataset.quality || "maj7";
+      const rootString = Number(button.dataset.rootString || 6);
+      const zone = button.dataset.zone === "mid" ? "mid" : "low";
+      const includeFifth = button.dataset.includeFifth === "1";
+      const extension = ["9", "11", "13"].includes(button.dataset.extension || "")
+        ? button.dataset.extension
+        : "none";
+      await playTutorialVoicing(root, quality, rootString, zone, includeFifth, extension);
+    });
+  });
 }
 
 function wireTutorialModule() {
@@ -2031,19 +2485,7 @@ function wireTutorialModule() {
     });
   });
 
-  lessonContent.querySelectorAll(".play-tutorial-chord-btn").forEach((button) => {
-    button.addEventListener("click", async () => {
-      const root = button.dataset.root || "C";
-      const quality = button.dataset.quality || "maj7";
-      const rootString = Number(button.dataset.rootString || 6);
-      const zone = button.dataset.zone === "mid" ? "mid" : "low";
-      const includeFifth = button.dataset.includeFifth === "1";
-      const extension = ["9", "11", "13"].includes(button.dataset.extension || "")
-        ? button.dataset.extension
-        : "none";
-      await playTutorialVoicing(root, quality, rootString, zone, includeFifth, extension);
-    });
-  });
+  wireTutorialChordPlayButtons();
 
   lessonContent.querySelectorAll("[data-ear-mode]").forEach((button) => {
     button.addEventListener("click", () => {
@@ -2083,6 +2525,30 @@ function wireTutorialModule() {
       renderLesson();
     });
   });
+}
+
+function wireShellChordsModule() {
+  const shellRootButtons = lessonContent.querySelectorAll("[data-shell-root-option]");
+
+  shellRootButtons.forEach((button) => {
+    button.addEventListener("click", () => {
+      shellBuilderState.root = button.dataset.shellRootOption || "C";
+      renderLesson();
+    });
+  });
+
+  wireTutorialChordPlayButtons();
+}
+
+function wireShellDiatonicModule() {
+  lessonContent.querySelectorAll("[data-shell-diatonic-key-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      shellDiatonicState.key = button.dataset.shellDiatonicKeyOption || "C";
+      renderLesson();
+    });
+  });
+
+  wireTutorialChordPlayButtons();
 }
 
 function renderScaleModule() {
@@ -2728,8 +3194,16 @@ function renderLesson() {
   const module = MODULES.find((item) => item.id === activeModuleId) || MODULES[0];
 
   if (module.kind === "tutorial") {
-    lessonContent.innerHTML = renderTutorialModule();
-    wireTutorialModule();
+    if (module.id === "shell_chords_substep") {
+      lessonContent.innerHTML = renderShellChordsModule();
+      wireShellChordsModule();
+    } else if (module.id === "shell_diatonic_7ths") {
+      lessonContent.innerHTML = renderShellDiatonicModule();
+      wireShellDiatonicModule();
+    } else {
+      lessonContent.innerHTML = renderTutorialModule();
+      wireTutorialModule();
+    }
     return;
   }
 
@@ -2751,10 +3225,21 @@ function renderLesson() {
 }
 
 function renderModuleNav() {
-  const step1Module = MODULES.find((module) => module.kind === "tutorial");
+  const step1Modules = TUTORIAL_MODULES;
   const step2Modules = PROGRESSION_MODULES;
   const step3Module = MODULES.find((module) => module.kind === "scales");
   const step4Module = MODULES.find((module) => module.kind === "major_scales");
+  const step1Markup = step1Modules
+    .map((module, idx) => {
+      return `
+        <li>
+          <button type="button" data-module-id="${module.id}">
+            <strong>${idx + 1}. ${module.title}</strong>
+          </button>
+        </li>
+      `;
+    })
+    .join("");
 
   const step2Markup = step2Modules
     .map((module, idx) => {
@@ -2770,11 +3255,7 @@ function renderModuleNav() {
 
   moduleNav.innerHTML = `
     <li class="nav-section">Step 1: Foundation</li>
-    <li>
-      <button type="button" data-module-id="${step1Module.id}">
-        <strong>${step1Module.title}</strong>
-      </button>
-    </li>
+    ${step1Markup}
     <li class="nav-section">Step 2: Progressions</li>
     ${step2Markup}
     <li class="nav-section">Step 3: Scales</li>
@@ -2809,7 +3290,8 @@ function setActiveModule(moduleId) {
   safeSetStoredModule(activeModuleId);
 
   if (module.kind === "tutorial") {
-    stageModuleLabel.textContent = "Step 1 of 4";
+    const tutorialIndex = TUTORIAL_MODULES.findIndex((item) => item.id === module.id) + 1;
+    stageModuleLabel.textContent = `Step 1 of 4 - Foundation ${tutorialIndex}/${TUTORIAL_MODULES.length}`;
     stageTitle.textContent = module.title;
   } else if (module.kind === "progression") {
     const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
@@ -2878,6 +3360,30 @@ function bootstrapApp() {
     nextModuleBtn.addEventListener("click", () => stepModule(1));
     if (easterEggGuitarBtn) {
       easterEggGuitarBtn.addEventListener("click", triggerEmojiRain);
+    }
+    if (tunerToggleBtn && miniTunerPanel) {
+      tunerToggleBtn.addEventListener("click", () => {
+        const nextOpen = miniTunerPanel.hidden;
+        setMiniTunerOpen(nextOpen);
+      });
+    }
+    if (tunerCloseBtn) {
+      tunerCloseBtn.addEventListener("click", () => setMiniTunerOpen(false));
+    }
+    tunerStringButtons.forEach((button) => {
+      button.addEventListener("click", async () => {
+        const frequency = Number(button.dataset.tunerFrequency || 0);
+        const label = button.dataset.tunerNote || "note";
+        if (frequency > 0) {
+          await playTunerReferenceTone(frequency, label);
+        }
+      });
+    });
+    if (tunerMicStartBtn) {
+      tunerMicStartBtn.addEventListener("click", startMiniTunerMic);
+    }
+    if (tunerMicStopBtn) {
+      tunerMicStopBtn.addEventListener("click", stopMiniTunerMic);
     }
   } catch (error) {
     console.error(error);
