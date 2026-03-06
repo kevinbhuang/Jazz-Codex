@@ -32,6 +32,12 @@ const MODULES = [
     blurb: "Step 1 sub-step: Diatonic shell movement in one key.",
   },
   {
+    id: "secondary_dominant",
+    kind: "tutorial",
+    title: "Secondary Dominant",
+    blurb: "Step 1 sub-step: Build the most common ii-V to a target chord.",
+  },
+  {
     id: "major_iivi",
     kind: "progression",
     step: "Progression 1",
@@ -94,6 +100,12 @@ const shellBuilderState = {
 
 const shellDiatonicState = {
   key: "C",
+  mode: "major",
+};
+
+const secondaryDominantState = {
+  targetRoot: "C",
+  targetQuality: "maj7",
 };
 
 const scaleModuleState = {
@@ -181,21 +193,32 @@ const SCALE_LIBRARY = {
 const MAJOR_SCALE_ROMANS = ["I", "ii", "iii", "IV", "V", "vi", "vii&deg;"];
 const MAJOR_SCALE_INTERVALS = [0, 2, 4, 5, 7, 9, 11];
 const MAJOR_SCALE_QUALITIES = ["maj7", "m7", "m7", "maj7", "dom7", "m7", "m7b5"];
+const NATURAL_MINOR_ROMANS = ["i", "ii&oslash;", "III", "iv", "v", "VI", "VII"];
+const NATURAL_MINOR_INTERVALS = [0, 2, 3, 5, 7, 8, 10];
+const NATURAL_MINOR_QUALITIES = ["m7", "m7b5", "maj7", "m7", "m7", "maj7", "dom7"];
 
-function majorScaleChordsForKey(key) {
+function scaleChordsForKey(key, mode = "major") {
   const tonicIndex = noteToIndex(key);
   if (tonicIndex < 0) return [];
   const preferFlats = key.includes("b");
+  const isMinor = mode === "minor";
+  const intervals = isMinor ? NATURAL_MINOR_INTERVALS : MAJOR_SCALE_INTERVALS;
+  const qualities = isMinor ? NATURAL_MINOR_QUALITIES : MAJOR_SCALE_QUALITIES;
+  const romans = isMinor ? NATURAL_MINOR_ROMANS : MAJOR_SCALE_ROMANS;
 
-  return MAJOR_SCALE_INTERVALS.map((interval, idx) => {
+  return intervals.map((interval, idx) => {
     const root = noteFromIndex(tonicIndex + interval, preferFlats);
-    const quality = MAJOR_SCALE_QUALITIES[idx];
+    const quality = qualities[idx];
     return {
-      roman: MAJOR_SCALE_ROMANS[idx],
+      roman: romans[idx],
       chord: chordSymbolFromRootQuality(root, quality),
       quality,
     };
   });
+}
+
+function majorScaleChordsForKey(key) {
+  return scaleChordsForKey(key, "major");
 }
 
 const PROGRESSION_DATA = {
@@ -382,6 +405,14 @@ const CHORD_QUALITIES = {
     semitones: [0, 3, 6, 9],
     symbol: "dim7",
   },
+};
+
+const JAZZ_QUALITY_NOTATION = {
+  maj7: { symbol: "△7", name: "Major 7" },
+  m7: { symbol: "-7", name: "Minor 7" },
+  dom7: { symbol: "7", name: "Dominant 7" },
+  m7b5: { symbol: "ø7", name: "Half-diminished 7" },
+  dim7: { symbol: "°7", name: "Diminished 7" },
 };
 
 const INTERVAL_LABELS = ["1", "b2", "2", "b3", "3", "4", "b5", "5", "#5", "6", "b7", "7"];
@@ -1096,6 +1127,29 @@ function chordSymbolFromRootQuality(root, quality) {
   const normalizedRoot = normalizeNoteName(root);
   const info = CHORD_QUALITIES[quality] || CHORD_QUALITIES.maj7;
   return `${normalizedRoot}${info.symbol}`;
+}
+
+function jazzChordSymbolFromRootQuality(root, quality) {
+  const normalizedRoot = normalizeNoteName(root);
+  const info = JAZZ_QUALITY_NOTATION[quality] || JAZZ_QUALITY_NOTATION.maj7;
+  return `${normalizedRoot}${info.symbol}`;
+}
+
+function chordQualityName(quality) {
+  return (JAZZ_QUALITY_NOTATION[quality] || JAZZ_QUALITY_NOTATION.maj7).name;
+}
+
+function formatChordSymbolForDisplay(chordSymbol, options = {}) {
+  const parsed = parseChordSymbol(chordSymbol);
+  if (!parsed) return chordSymbol;
+  const base = jazzChordSymbolFromRootQuality(parsed.root, parsed.quality);
+  const withBass = parsed.bass ? `${base}/${parsed.bass}` : base;
+  if (options.includeName !== true) return withBass;
+  return `${withBass} (${chordQualityName(parsed.quality)})`;
+}
+
+function renderJazzNotationAid() {
+  return '<p class="tutorial-card-copy"><strong>Jazz notation aid:</strong> △7 = major 7, -7 = minor 7, 7 = dominant 7, ø7 = half-diminished, °7 = diminished.</p>';
 }
 
 function renderDiagram(voicing, options = {}) {
@@ -1984,11 +2038,11 @@ function uniqueChordsInOrder(bars) {
 }
 
 function qualitySummary(quality) {
-  if (quality === "maj7") return { label: "Major 7", formula: "1 3 7" };
-  if (quality === "m7") return { label: "Minor 7", formula: "1 b3 b7" };
-  if (quality === "dom7") return { label: "Dominant 7", formula: "1 3 b7" };
-  if (quality === "m7b5") return { label: "Minor 7b5", formula: "1 b3 b5 b7" };
-  if (quality === "dim7") return { label: "Diminished 7", formula: "1 b3 b5 bb7" };
+  if (quality === "maj7") return { label: "Major 7 (△7)", formula: "1 3 7" };
+  if (quality === "m7") return { label: "Minor 7 (-7)", formula: "1 b3 b7" };
+  if (quality === "dom7") return { label: "Dominant 7 (7)", formula: "1 3 b7" };
+  if (quality === "m7b5") return { label: "Half-diminished (ø7)", formula: "1 b3 b5 b7" };
+  if (quality === "dim7") return { label: "Diminished 7 (°7)", formula: "1 b3 b5 bb7" };
   return { label: "Chord", formula: "1 3 7" };
 }
 
@@ -2015,7 +2069,7 @@ function voicingHasDegree(voicing, degree) {
 }
 
 function displayChordSymbol(root, quality, includeFifth, extension) {
-  const base = chordSymbolFromRootQuality(root, quality);
+  const base = jazzChordSymbolFromRootQuality(root, quality);
   const extras = [];
   const allowNaturalFifth = quality !== "m7b5" && quality !== "dim7";
   if (includeFifth && allowNaturalFifth) extras.push("5");
@@ -2220,6 +2274,7 @@ function renderTutorialModule() {
   return `
     <section class="lesson-block">
       <h3>Step 1 Tutorial: Chord Construction</h3>
+      ${renderJazzNotationAid()}
       <div class="builder-controls">
         <div class="builder-root-wrap">
           <span>Root</span>
@@ -2315,6 +2370,7 @@ function renderShellChordsModule() {
   return `
     <section class="lesson-block">
       <h3>Sub-step: Shell Chords</h3>
+      ${renderJazzNotationAid()}
       <div class="builder-controls">
         <div class="builder-root-wrap">
           <span>Root</span>
@@ -2344,10 +2400,11 @@ function renderShellDiatonicCard(item, rootString, zone, voicingOverride = null)
   if (!voicing) return "";
 
   const summary = qualitySummary(item.quality);
+  const chordLabel = formatChordSymbolForDisplay(item.chord, { includeName: true });
   return `
     <article class="chord-card">
       <div class="chord-card-top">
-        <h4>${item.roman} - ${item.chord}</h4>
+        <h4>${item.roman} - ${chordLabel}</h4>
         <button
           type="button"
           class="play-tutorial-chord-btn"
@@ -2356,7 +2413,7 @@ function renderShellDiatonicCard(item, rootString, zone, voicingOverride = null)
           data-root-string="${rootString}"
           data-zone="${zone}"
           data-include-fifth="0"
-          aria-label="Play ${item.chord}"
+          aria-label="Play ${formatChordSymbolForDisplay(item.chord)}"
         >🔈</button>
       </div>
       ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
@@ -2378,9 +2435,31 @@ function shellDiatonicCardsFromOrder(degreeChords, rootString, zone, degreeOrder
 
 function renderShellDiatonicModule() {
   const key = shellDiatonicState.key;
-  const degreeChords = majorScaleChordsForKey(key);
+  const mode = shellDiatonicState.mode === "minor" ? "minor" : "major";
+  const degreeChords = scaleChordsForKey(key, mode);
   const romanCells = degreeChords.map((item) => "<td>" + item.roman + "</td>").join("");
-  const chordCells = degreeChords.map((item) => "<td>" + item.chord + "</td>").join("");
+  const chordCells = degreeChords
+    .map((item) => "<td>" + formatChordSymbolForDisplay(item.chord) + "</td>")
+    .join("");
+  const modeButtons = [
+    { id: "major", label: "Major" },
+    { id: "minor", label: "Minor" },
+  ]
+    .map((item) => {
+      const active = mode === item.id;
+      return (
+        '<button type="button" class="root-choice ' +
+        (active ? "active" : "") +
+        '" data-shell-diatonic-mode-option="' +
+        item.id +
+        '" aria-pressed="' +
+        (active ? "true" : "false") +
+        '">' +
+        item.label +
+        "</button>"
+      );
+    })
+    .join("");
   const keyButtons = ROOT_NOTE_OPTIONS.map((note) => {
     const active = key === note;
     return (
@@ -2396,11 +2475,9 @@ function renderShellDiatonicModule() {
     );
   }).join("");
 
-  // Match the chord-flow layout from the reference sheet:
-  // 5th-string path: I ii iii IV V vi viiø I
-  // 6th-string path: IV V vi viiø I ii iii IV
+  // Keep both paths aligned I -> I for easier comparison.
   const root5Order = [0, 1, 2, 3, 4, 5, 6, 0];
-  const root6Order = [3, 4, 5, 6, 0, 1, 2, 3];
+  const root6Order = [0, 1, 2, 3, 4, 5, 6, 0];
   const root6Cards = shellDiatonicCardsFromOrder(degreeChords, 6, "low", root6Order);
   const root5Cards = shellDiatonicCardsFromOrder(degreeChords, 5, "mid", root5Order);
 
@@ -2414,8 +2491,15 @@ function renderShellDiatonicModule() {
             ${keyButtons}
           </div>
         </div>
+        <div class="builder-root-wrap">
+          <span>Quality</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Shell diatonic quality">
+            ${modeButtons}
+          </div>
+        </div>
       </div>
-      <p class="tutorial-card-copy">Diatonic seventh chords in <span class="chip">${key} major</span>.</p>
+      <p class="tutorial-card-copy">Diatonic seventh chords in <span class="chip">${key} ${mode}</span>.</p>
+      ${renderJazzNotationAid()}
       <div class="table-scroll-wrap">
         <table class="formula-table major-scale-table">
           <tbody>
@@ -2427,7 +2511,7 @@ function renderShellDiatonicModule() {
     </section>
 
     <section class="lesson-block">
-      <h3>6th-String Root Diatonic Path (IV -> IV)</h3>
+      <h3>6th-String Root Diatonic Path (I -> I)</h3>
       <div class="diagram-grid tutorial-grid">${root6Cards || "<p>Unable to build 6th-string diatonic shells.</p>"}</div>
     </section>
 
@@ -2547,6 +2631,134 @@ function wireShellDiatonicModule() {
       renderLesson();
     });
   });
+  lessonContent.querySelectorAll("[data-shell-diatonic-mode-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      shellDiatonicState.mode = button.dataset.shellDiatonicModeOption === "minor" ? "minor" : "major";
+      renderLesson();
+    });
+  });
+
+  wireTutorialChordPlayButtons();
+}
+
+function secondaryDominantProgression(root, quality) {
+  const rootIndex = noteToIndex(root);
+  if (rootIndex < 0) return [];
+  const preferFlats = root.includes("b");
+  const isMinorTarget = quality === "m7" || quality === "m7b5" || quality === "dim7";
+  const iiRoot = noteFromIndex(rootIndex + 2, preferFlats);
+  const vRoot = noteFromIndex(rootIndex + 7, preferFlats);
+  const iiQuality = isMinorTarget ? "m7b5" : "m7";
+  const vQuality = "dom7";
+
+  return [
+    {
+      role: "ii",
+      root: iiRoot,
+      quality: iiQuality,
+      chord: chordSymbolFromRootQuality(iiRoot, iiQuality),
+    },
+    {
+      role: "V",
+      root: vRoot,
+      quality: vQuality,
+      chord: chordSymbolFromRootQuality(vRoot, vQuality),
+    },
+    {
+      role: "I",
+      root,
+      quality,
+      chord: chordSymbolFromRootQuality(root, quality),
+    },
+  ];
+}
+
+function renderSecondaryDominantModule() {
+  const targetRoot = secondaryDominantState.targetRoot;
+  const targetQuality = secondaryDominantState.targetQuality;
+  const progression = secondaryDominantProgression(targetRoot, targetQuality);
+  const progressionText = progression.map((item) => formatChordSymbolForDisplay(item.chord)).join(" -> ");
+  const root6Cards = progression
+    .map((item) => renderTutorialShellBuilderCard(item.root, item.quality, 6, "low", false))
+    .join("");
+  const root5Cards = progression
+    .map((item) => renderTutorialShellBuilderCard(item.root, item.quality, 5, "mid", false))
+    .join("");
+
+  return `
+    <section class="lesson-block">
+      <h3>Step 1.4: Secondary Dominant</h3>
+      <p class="tutorial-card-copy"><strong>Goal:</strong> Given a target chord, output the most common jazz <strong>ii-V</strong> that resolves to it.</p>
+      ${renderJazzNotationAid()}
+      <div class="builder-controls">
+        <div class="builder-root-wrap">
+          <span>Target root</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Secondary dominant target root">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="root-choice ${targetRoot === note ? "active" : ""}" data-secondary-root-option="${note}" aria-pressed="${targetRoot === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
+        <div class="builder-extension-wrap">
+          <span>Target quality</span>
+          <div class="builder-extension-group" role="radiogroup" aria-label="Secondary dominant target quality">
+            ${[
+              { quality: "maj7", label: "maj7" },
+              { quality: "m7", label: "m7" },
+              { quality: "dom7", label: "7" },
+              { quality: "m7b5", label: "m7b5" },
+            ]
+              .map(
+                (item) =>
+                  `<button type="button" class="extension-choice ${targetQuality === item.quality ? "active" : ""}" data-secondary-quality-option="${item.quality}" aria-pressed="${targetQuality === item.quality ? "true" : "false"}">${item.label}</button>`
+              )
+              .join("")}
+          </div>
+        </div>
+      </div>
+
+      <p class="tutorial-card-copy"><strong>Result:</strong> <span class="chip">${progressionText || "No valid target chord selected."}</span></p>
+      <div class="table-scroll-wrap">
+        <table class="formula-table major-scale-table">
+          <tbody>
+            <tr><th>Function</th>${progression.map((item) => `<td>${item.role}</td>`).join("")}</tr>
+            <tr><th>Chord</th>${progression
+              .map((item) => `<td>${formatChordSymbolForDisplay(item.chord, { includeName: true })}</td>`)
+              .join("")}</tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>6th-String Shells (ii -> V -> I)</h3>
+      <div class="diagram-grid tutorial-grid">${root6Cards || "<p>Unable to build 6th-string shells for this target.</p>"}</div>
+    </section>
+
+    <section class="lesson-block">
+      <h3>5th-String Shells (ii -> V -> I)</h3>
+      <div class="diagram-grid tutorial-grid">${root5Cards || "<p>Unable to build 5th-string shells for this target.</p>"}</div>
+    </section>
+  `;
+}
+
+function wireSecondaryDominantModule() {
+  lessonContent.querySelectorAll("[data-secondary-root-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      secondaryDominantState.targetRoot = button.dataset.secondaryRootOption || "C";
+      renderLesson();
+    });
+  });
+  lessonContent.querySelectorAll("[data-secondary-quality-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const quality = button.dataset.secondaryQualityOption;
+      secondaryDominantState.targetQuality = ["maj7", "m7", "dom7", "m7b5"].includes(quality)
+        ? quality
+        : "maj7";
+      renderLesson();
+    });
+  });
 
   wireTutorialChordPlayButtons();
 }
@@ -2571,7 +2783,7 @@ function renderScaleModule() {
       const recommendedId = recommendedScaleIdForChord(chord);
       const recommended = SCALE_LIBRARY[recommendedId] || SCALE_LIBRARY.ionian;
       const active = recommendedId === scaleModuleState.scaleId ? "active-bar" : "";
-      return `<div class="bar-item ${active}">Bar ${idx + 1}: <strong>${chord}</strong><br/><small>Recommended: ${recommended.name}</small></div>`;
+      return `<div class="bar-item ${active}">Bar ${idx + 1}: <strong>${formatChordSymbolForDisplay(chord)}</strong><br/><small>Recommended: ${recommended.name}</small></div>`;
     })
     .join("");
   const applyScaleDiagrams = applyBars
@@ -2580,7 +2792,7 @@ function renderScaleModule() {
       const scaleId = recommendedScaleIdForChord(chord);
       return `
         <article class="chord-card">
-          <h4>Bar ${idx + 1}: ${chord}</h4>
+          <h4>Bar ${idx + 1}: ${formatChordSymbolForDisplay(chord, { includeName: true })}</h4>
           <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
           ${renderScaleDiagram(root, scaleId, "low", {
             showNoteNames: uiState.showNoteNames,
@@ -2620,6 +2832,7 @@ function renderScaleModule() {
         </div>
       </div>
       <p><strong>Formula:</strong> ${scale.formula} <span class="chip">${scale.targetLabel}</span></p>
+      ${renderJazzNotationAid()}
       <div class="fingering-controls">
         <label>
           <input data-scale-chord-tones-only-toggle="1" type="checkbox" ${chordTonesOnly ? "checked" : ""}/>
@@ -2749,7 +2962,10 @@ function renderScaleModule() {
         (PROGRESSION_DATA[playAlongState.progressionId] || PROGRESSION_DATA.major_iivi).tonic || "C",
         playAlongState.key
       )
-        .map((chord, idx) => `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`)
+        .map(
+          (chord, idx) =>
+            `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${formatChordSymbolForDisplay(chord)}</strong></div>`
+        )
         .join("")}</div>
       <div class="diagram-grid tutorial-grid apply-scale-grid">${transposeBarsFromTonic(
         (PROGRESSION_DATA[playAlongState.progressionId] || PROGRESSION_DATA.major_iivi).bars,
@@ -2761,7 +2977,7 @@ function renderScaleModule() {
           const scaleId = recommendedScaleIdForChord(chord);
           return `
             <article class="chord-card">
-              <h4>Bar ${idx + 1}: ${chord}</h4>
+              <h4>Bar ${idx + 1}: ${formatChordSymbolForDisplay(chord, { includeName: true })}</h4>
               <p class="tutorial-card-copy">${scaleIdLabel(scaleId)}</p>
               ${renderScaleDiagram(root, scaleId, "low", {
                 showNoteNames: uiState.showNoteNames,
@@ -2838,7 +3054,9 @@ function renderMajorScaleModule() {
   const degreeChords = majorScaleChordsForKey(key);
 
   const romanCells = degreeChords.map((item) => "<td>" + item.roman + "</td>").join("");
-  const chordCells = degreeChords.map((item) => "<td>" + item.chord + "</td>").join("");
+  const chordCells = degreeChords
+    .map((item) => "<td>" + formatChordSymbolForDisplay(item.chord) + "</td>")
+    .join("");
 
   const diagramsMarkup = degreeChords
     .map((item) => {
@@ -2846,7 +3064,11 @@ function renderMajorScaleModule() {
       if (!voicing) {
         return (
           '<article class="chord-card">' +
-          "<h4>" + item.roman + " - " + item.chord + "</h4>" +
+          "<h4>" +
+          item.roman +
+          " - " +
+          formatChordSymbolForDisplay(item.chord, { includeName: true }) +
+          "</h4>" +
           '<p class="tutorial-card-copy">No voicing found in this zone.</p>' +
           "</article>"
         );
@@ -2855,13 +3077,17 @@ function renderMajorScaleModule() {
       return (
         '<article class="chord-card">' +
         '<div class="chord-card-top">' +
-        "<h4>" + item.roman + " - " + item.chord + "</h4>" +
+        "<h4>" +
+        item.roman +
+        " - " +
+        formatChordSymbolForDisplay(item.chord, { includeName: true }) +
+        "</h4>" +
         '<button type="button" class="play-chord-btn" data-chord="' +
         item.chord +
         '" data-module="major_scale_harmony" data-include-fifth="' +
         (includeFifth ? "1" : "0") +
         '" aria-label="Play ' +
-        item.chord +
+        formatChordSymbolForDisplay(item.chord) +
         '">🔈</button>' +
         "</div>" +
         renderDiagram(voicing, { showNoteNames: uiState.showNoteNames }) +
@@ -2907,6 +3133,7 @@ function renderMajorScaleModule() {
     '<p class="tutorial-card-copy">Diatonic seventh chords in <span class="chip">' +
     key +
     " major</span>.</p>" +
+    renderJazzNotationAid() +
     '<div class="table-scroll-wrap">' +
     '<table class="formula-table major-scale-table">' +
     "<tbody>" +
@@ -3066,7 +3293,7 @@ function renderProgressionModule(module) {
   const barsMarkup = bars
     .map(
       (chord, idx) =>
-        `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${chord}</strong></div>`
+        `<div class="bar-item" data-bar-index="${idx}">Bar ${idx + 1}: <strong>${formatChordSymbolForDisplay(chord)}</strong></div>`
     )
     .join("");
 
@@ -3077,8 +3304,8 @@ function renderProgressionModule(module) {
       return `
         <article class="chord-card">
           <div class="chord-card-top">
-            <h4>${chord}</h4>
-            <button type="button" class="play-chord-btn" data-chord="${chord}" data-module="${module.id}" data-include-fifth="${includeFifth ? "1" : "0"}" aria-label="Play ${chord}">🔈</button>
+            <h4>${formatChordSymbolForDisplay(chord, { includeName: true })}</h4>
+            <button type="button" class="play-chord-btn" data-chord="${chord}" data-module="${module.id}" data-include-fifth="${includeFifth ? "1" : "0"}" aria-label="Play ${formatChordSymbolForDisplay(chord)}">🔈</button>
           </div>
           ${renderDiagram(voicing, { showNoteNames: uiState.showNoteNames })}
         </article>
@@ -3090,6 +3317,7 @@ function renderProgressionModule(module) {
     <section class="lesson-block">
       <h3>Progression: ${module.title}</h3>
       <p><strong>Key/Context:</strong> ${data.keyLabel} <span class="chip">Transpose key: ${transposeKey}</span></p>
+      ${renderJazzNotationAid()}
       <div class="practice-player">
         <div class="transpose-chip-wrap">
           <span>Transpose</span>
@@ -3200,6 +3428,9 @@ function renderLesson() {
     } else if (module.id === "shell_diatonic_7ths") {
       lessonContent.innerHTML = renderShellDiatonicModule();
       wireShellDiatonicModule();
+    } else if (module.id === "secondary_dominant") {
+      lessonContent.innerHTML = renderSecondaryDominantModule();
+      wireSecondaryDominantModule();
     } else {
       lessonContent.innerHTML = renderTutorialModule();
       wireTutorialModule();
