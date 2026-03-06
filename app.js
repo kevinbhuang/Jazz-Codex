@@ -409,7 +409,7 @@ const CHORD_QUALITIES = {
 
 const JAZZ_QUALITY_NOTATION = {
   maj7: { symbol: "△7", name: "Major 7" },
-  m7: { symbol: "-7", name: "Minor 7" },
+  m7: { symbol: "m7", name: "Minor 7" },
   dom7: { symbol: "7", name: "Dominant 7" },
   m7b5: { symbol: "ø7", name: "Half-diminished 7" },
   dim7: { symbol: "°7", name: "Diminished 7" },
@@ -1149,7 +1149,7 @@ function formatChordSymbolForDisplay(chordSymbol, options = {}) {
 }
 
 function renderJazzNotationAid() {
-  return '<p class="tutorial-card-copy"><strong>Jazz notation aid:</strong> △7 = major 7, -7 = minor 7, 7 = dominant 7, ø7 = half-diminished, °7 = diminished.</p>';
+  return '<p class="tutorial-card-copy"><strong>Jazz notation aid:</strong> △7 = major 7, m7 = minor 7, 7 = dominant 7, ø7 = half-diminished, °7 = diminished.</p>';
 }
 
 function renderDiagram(voicing, options = {}) {
@@ -2039,7 +2039,7 @@ function uniqueChordsInOrder(bars) {
 
 function qualitySummary(quality) {
   if (quality === "maj7") return { label: "Major 7 (△7)", formula: "1 3 7" };
-  if (quality === "m7") return { label: "Minor 7 (-7)", formula: "1 b3 b7" };
+  if (quality === "m7") return { label: "Minor 7 (m7)", formula: "1 b3 b7" };
   if (quality === "dom7") return { label: "Dominant 7 (7)", formula: "1 3 b7" };
   if (quality === "m7b5") return { label: "Half-diminished (ø7)", formula: "1 b3 b5 b7" };
   if (quality === "dim7") return { label: "Diminished 7 (°7)", formula: "1 b3 b5 bb7" };
