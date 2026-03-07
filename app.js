@@ -73,6 +73,13 @@ const MODULES = [
     blurb: "Cmaj7 Gm7 C7 Fmaj7",
   },
   {
+    id: "circle_of_fifths",
+    kind: "progression",
+    step: "Step 2.2",
+    title: "Circle of Fifths",
+    blurb: "Select key + mode, view diatonic qualities around the circle.",
+  },
+  {
     id: "top_jazz_scales",
     kind: "scales",
     title: "Jazz Scales",
@@ -106,6 +113,11 @@ const shellDiatonicState = {
 const secondaryDominantState = {
   targetRoot: "C",
   targetQuality: "maj7",
+};
+
+const circleOfFifthsState = {
+  key: "C",
+  mode: "major",
 };
 
 const scaleModuleState = {
@@ -151,6 +163,10 @@ const uiState = {
 
 const PROGRESSION_MODULES = MODULES.filter((module) => module.kind === "progression");
 const TUTORIAL_MODULES = MODULES.filter((module) => module.kind === "tutorial");
+const CIRCLE_OF_FIFTHS_MODULE_ID = "circle_of_fifths";
+const COMMON_PROGRESSION_MODULES = PROGRESSION_MODULES.filter(
+  (module) => module.id !== CIRCLE_OF_FIFTHS_MODULE_ID
+);
 
 const SCALE_LIBRARY = {
   ionian: {
@@ -515,6 +531,9 @@ let activeModuleId = safeGetStoredModule() || MODULES[0].id;
 if (!MODULES.some((module) => module.id === activeModuleId)) {
   activeModuleId = MODULES[0].id;
 }
+let lastProgressionModuleId =
+  COMMON_PROGRESSION_MODULES.find((module) => module.id === activeModuleId)?.id ||
+  (COMMON_PROGRESSION_MODULES[0] ? COMMON_PROGRESSION_MODULES[0].id : null);
 const transposeSelectionByModule = {};
 Object.entries(PROGRESSION_DATA).forEach(([moduleId, data]) => {
   transposeSelectionByModule[moduleId] = data.tonic || "C";
@@ -2763,6 +2782,140 @@ function wireSecondaryDominantModule() {
   wireTutorialChordPlayButtons();
 }
 
+function circleOfFifthsCounterclockwise(root) {
+  const rootIndex = noteToIndex(root);
+  if (rootIndex < 0) return [];
+  const preferFlats = root.includes("b");
+  return Array.from({ length: 12 }, (_, step) => noteFromIndex(rootIndex + step * 5, preferFlats));
+}
+
+function renderCircleOfFifthsModule() {
+  const key = circleOfFifthsState.key;
+  const mode = circleOfFifthsState.mode === "minor" ? "minor" : "major";
+  const degreeChords = scaleChordsForKey(key, mode);
+  const circleNotes = circleOfFifthsCounterclockwise(key);
+  const chordByRoot = {};
+  degreeChords.forEach((item) => {
+    const parsed = parseChordSymbol(item.chord);
+    if (!parsed) return;
+    chordByRoot[parsed.root] = item;
+  });
+  const orderedDiatonicByCircle = circleNotes.map((note) => chordByRoot[note]).filter(Boolean);
+  const circleOrderText = orderedDiatonicByCircle
+    .map((item) => formatChordSymbolForDisplay(item.chord))
+    .join(" -> ");
+
+  const centerX = 210;
+  const centerY = 210;
+  const radius = 150;
+  const circleNodes = circleNotes
+    .map((note, idx) => {
+      const item = chordByRoot[note];
+      const angle = ((-90 - idx * 30) * Math.PI) / 180;
+      const x = centerX + radius * Math.cos(angle);
+      const y = centerY + radius * Math.sin(angle);
+      const active = Boolean(item);
+      const qualityInfo = item
+        ? JAZZ_QUALITY_NOTATION[item.quality] || JAZZ_QUALITY_NOTATION.maj7
+        : null;
+      const noteFont = active ? 12 : 11;
+      return `
+        <g class="circle-node ${active ? "active" : ""}">
+          <circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="${active ? 24 : 20}" fill="${
+            active ? "#fff2d9" : "#f7f8f8"
+          }" stroke="${active ? "#b44500" : "#cebba0"}" stroke-width="${active ? 2 : 1.2}" />
+          <text x="${x.toFixed(1)}" y="${(y - (active ? 5 : 0)).toFixed(
+            1
+          )}" text-anchor="middle" font-family="IBM Plex Mono" font-size="${noteFont}" fill="#152534">${note}</text>
+          ${
+            active
+              ? `<text x="${x.toFixed(1)}" y="${(y + 10).toFixed(
+                  1
+                )}" text-anchor="middle" font-family="IBM Plex Mono" font-size="10" fill="#0d6a70">${qualityInfo.symbol}</text>`
+              : ""
+          }
+        </g>
+      `;
+    })
+    .join("");
+
+  const ringLabels = orderedDiatonicByCircle
+    .map(
+      (item) =>
+        `<span class="chip">${item.roman}: ${formatChordSymbolForDisplay(item.chord, { includeName: true })}</span>`
+    )
+    .join("");
+
+  const shellCards6 = orderedDiatonicByCircle
+    .map((item) => renderShellDiatonicCard(item, 6, "low"))
+    .join("");
+  const shellCards5 = orderedDiatonicByCircle
+    .map((item) => renderShellDiatonicCard(item, 5, "mid"))
+    .join("");
+
+  return `
+    <section class="lesson-block">
+      <h3>Step 2.2: Circle of Fifths</h3>
+      <p class="tutorial-card-copy"><strong>Goal:</strong> Select a key and quality, then map diatonic seventh-chord qualities around the counterclockwise circle.</p>
+      ${renderJazzNotationAid()}
+      <div class="builder-controls">
+        <div class="builder-root-wrap">
+          <span>Key</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Circle of fifths key">
+            ${ROOT_NOTE_OPTIONS.map(
+              (note) =>
+                `<button type="button" class="root-choice ${key === note ? "active" : ""}" data-circle-key-option="${note}" aria-pressed="${key === note ? "true" : "false"}">${note}</button>`
+            ).join("")}
+          </div>
+        </div>
+        <div class="builder-extension-wrap">
+          <span>Mode</span>
+          <div class="builder-extension-group" role="radiogroup" aria-label="Circle of fifths mode">
+            <button type="button" class="extension-choice ${mode === "major" ? "active" : ""}" data-circle-mode-option="major" aria-pressed="${mode === "major" ? "true" : "false"}">Major</button>
+            <button type="button" class="extension-choice ${mode === "minor" ? "active" : ""}" data-circle-mode-option="minor" aria-pressed="${mode === "minor" ? "true" : "false"}">Minor</button>
+          </div>
+        </div>
+      </div>
+      <div class="circle-of-fifths-wrap">
+        <svg class="circle-of-fifths-svg" viewBox="0 0 420 420" role="img" aria-label="Circle of fifths in ${key} ${mode}">
+          <circle cx="${centerX}" cy="${centerY}" r="${radius}" fill="none" stroke="#cebba0" stroke-width="2"/>
+          <circle cx="${centerX}" cy="${centerY}" r="${radius - 36}" fill="none" stroke="#e7d8bf" stroke-width="1.5"/>
+          ${circleNodes}
+          <text x="${centerX}" y="${centerY - 8}" text-anchor="middle" font-family="Space Grotesk" font-size="17" font-weight="700" fill="#152534">${key} ${mode}</text>
+          <text x="${centerX}" y="${centerY + 16}" text-anchor="middle" font-family="IBM Plex Mono" font-size="12" fill="#4a5e68">Counterclockwise fifths</text>
+        </svg>
+      </div>
+      <p class="tutorial-card-copy"><strong>Diatonic quality map:</strong> ${ringLabels}</p>
+      <p class="tutorial-card-copy"><strong>Counterclockwise order:</strong> ${circleOrderText || "No diatonic chords available."}</p>
+    </section>
+
+    <section class="lesson-block">
+      <h3>Shell Chord Fingerings (Counterclockwise Order)</h3>
+      <h4 class="builder-row-label">6th-string shells</h4>
+      <div class="diagram-grid tutorial-grid">${shellCards6 || "<p>No 6th-string shell voicings available.</p>"}</div>
+      <h4 class="builder-row-label">5th-string shells</h4>
+      <div class="diagram-grid tutorial-grid">${shellCards5 || "<p>No 5th-string shell voicings available.</p>"}</div>
+    </section>
+  `;
+}
+
+function wireCircleOfFifthsModule() {
+  lessonContent.querySelectorAll("[data-circle-key-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      circleOfFifthsState.key = button.dataset.circleKeyOption || "C";
+      renderLesson();
+    });
+  });
+  lessonContent.querySelectorAll("[data-circle-mode-option]").forEach((button) => {
+    button.addEventListener("click", () => {
+      circleOfFifthsState.mode = button.dataset.circleModeOption === "minor" ? "minor" : "major";
+      renderLesson();
+    });
+  });
+
+  wireTutorialChordPlayButtons();
+}
+
 function renderScaleModule() {
   const scale = SCALE_LIBRARY[scaleModuleState.scaleId] || SCALE_LIBRARY.ionian;
   const chordTonesOnly = scaleModuleState.chordTonesOnly === true;
@@ -2773,7 +2926,9 @@ function renderScaleModule() {
     onlyDegrees: chordTonesOnly ? selectedToneDegrees : null,
     fretSpan: step3ScaleFretSpan,
   };
-  const applyProgression = PROGRESSION_MODULES.find((module) => module.id === scaleModuleState.applyModuleId) || PROGRESSION_MODULES[0];
+  const applyProgression =
+    COMMON_PROGRESSION_MODULES.find((module) => module.id === scaleModuleState.applyModuleId) ||
+    COMMON_PROGRESSION_MODULES[0];
   const applyData = applyProgression ? PROGRESSION_DATA[applyProgression.id] : null;
   const applyBars = applyData
     ? transposeBarsFromTonic(applyData.bars, applyData.tonic || "C", scaleModuleState.applyKey)
@@ -2861,7 +3016,7 @@ function renderScaleModule() {
       <label>
         Progression
         <select id="scaleApplyProgressionSelect" class="tempo-input">
-          ${PROGRESSION_MODULES.map(
+          ${COMMON_PROGRESSION_MODULES.map(
             (module) => `<option value="${module.id}" ${module.id === scaleModuleState.applyModuleId ? "selected" : ""}>${module.title}</option>`
           ).join("")}
         </select>
@@ -2899,7 +3054,7 @@ function renderScaleModule() {
         <label>
           Progression
           <select id="playAlongProgressionSelect" class="tempo-input">
-            ${PROGRESSION_MODULES.map(
+            ${COMMON_PROGRESSION_MODULES.map(
               (item) => `<option value="${item.id}" ${item.id === playAlongState.progressionId ? "selected" : ""}>${item.title}</option>`
             ).join("")}
           </select>
@@ -3256,7 +3411,9 @@ function wirePlayAlongModule() {
       const tempo = clampTempo(Number(tempoInput.value));
       playAlongState.tempo = tempo;
       tempoInput.value = String(tempo);
-      const module = PROGRESSION_MODULES.find((item) => item.id === playAlongState.progressionId) || PROGRESSION_MODULES[0];
+      const module =
+        COMMON_PROGRESSION_MODULES.find((item) => item.id === playAlongState.progressionId) ||
+        COMMON_PROGRESSION_MODULES[0];
       const data = PROGRESSION_DATA[module.id];
       const bars = transposeBarsFromTonic(data.bars, data.tonic || "C", playAlongState.key);
       await startBackingTrack("play_along_loop", bars, tempo, statusEl, startBtn, stopBtn, barEls, { mode: "playalong" });
@@ -3315,7 +3472,17 @@ function renderProgressionModule(module) {
 
   return `
     <section class="lesson-block">
-      <h3>Progression: ${module.title}</h3>
+      <h3>Common Progressions</h3>
+      <label>
+        Progression
+        <select id="progressionModuleSelect" class="tempo-input">
+          ${COMMON_PROGRESSION_MODULES.map(
+            (item, idx) =>
+              `<option value="${item.id}" ${item.id === module.id ? "selected" : ""}>${idx + 1}. ${item.title}</option>`
+          ).join("")}
+        </select>
+      </label>
+      <p><strong>Selected:</strong> ${module.title}</p>
       <p><strong>Key/Context:</strong> ${data.keyLabel} <span class="chip">Transpose key: ${transposeKey}</span></p>
       ${renderJazzNotationAid()}
       <div class="practice-player">
@@ -3365,6 +3532,7 @@ function wireChordPreviewButtons() {
 }
 
 function wirePracticePlayer(module, data) {
+  const progressionSelect = document.getElementById("progressionModuleSelect");
   const transposeButtons = lessonContent.querySelectorAll("[data-transpose-option]");
   const tempoInput = document.getElementById(`tempoInput-${module.id}`);
   const includeFifthInput = document.getElementById(`progressionIncludeFifth-${module.id}`);
@@ -3374,6 +3542,15 @@ function wirePracticePlayer(module, data) {
   const barEls = Array.from(lessonContent.querySelectorAll(".bar-item"));
 
   if (!tempoInput || !startBtn || !stopBtn || !statusEl) return;
+
+  if (progressionSelect) {
+    progressionSelect.addEventListener("change", () => {
+      const nextId = progressionSelect.value;
+      if (COMMON_PROGRESSION_MODULES.some((item) => item.id === nextId)) {
+        setActiveModule(nextId);
+      }
+    });
+  }
 
   if (includeFifthInput) {
     includeFifthInput.addEventListener("change", () => {
@@ -3450,6 +3627,12 @@ function renderLesson() {
     return;
   }
 
+  if (module.id === CIRCLE_OF_FIFTHS_MODULE_ID) {
+    lessonContent.innerHTML = renderCircleOfFifthsModule();
+    wireCircleOfFifthsModule();
+    return;
+  }
+
   lessonContent.innerHTML = renderProgressionModule(module);
   wireChordPreviewButtons();
   wirePracticePlayer(module, PROGRESSION_DATA[module.id]);
@@ -3457,22 +3640,13 @@ function renderLesson() {
 
 function renderModuleNav() {
   const step1Modules = TUTORIAL_MODULES;
-  const step2Modules = PROGRESSION_MODULES;
   const step3Module = MODULES.find((module) => module.kind === "scales");
   const step4Module = MODULES.find((module) => module.kind === "major_scales");
+  const progressionTabTarget =
+    COMMON_PROGRESSION_MODULES.find((module) => module.id === lastProgressionModuleId)?.id ||
+    (COMMON_PROGRESSION_MODULES[0] ? COMMON_PROGRESSION_MODULES[0].id : MODULES[0].id);
+  const circleModule = PROGRESSION_MODULES.find((module) => module.id === CIRCLE_OF_FIFTHS_MODULE_ID);
   const step1Markup = step1Modules
-    .map((module, idx) => {
-      return `
-        <li>
-          <button type="button" data-module-id="${module.id}">
-            <strong>${idx + 1}. ${module.title}</strong>
-          </button>
-        </li>
-      `;
-    })
-    .join("");
-
-  const step2Markup = step2Modules
     .map((module, idx) => {
       return `
         <li>
@@ -3488,7 +3662,20 @@ function renderModuleNav() {
     <li class="nav-section">Step 1: Foundation</li>
     ${step1Markup}
     <li class="nav-section">Step 2: Progressions</li>
-    ${step2Markup}
+    <li>
+      <button type="button" data-module-id="${progressionTabTarget}" data-module-group="progressions-common">
+        <strong>2.1 Common Progressions</strong>
+      </button>
+    </li>
+    ${
+      circleModule
+        ? `<li>
+      <button type="button" data-module-id="${circleModule.id}" data-module-group="progressions-circle">
+        <strong>2.2 ${circleModule.title}</strong>
+      </button>
+    </li>`
+        : ""
+    }
     <li class="nav-section">Step 3: Scales</li>
     <li>
       <button type="button" data-module-id="${step3Module.id}">
@@ -3525,9 +3712,14 @@ function setActiveModule(moduleId) {
     stageModuleLabel.textContent = `Step 1 of 4 - Foundation ${tutorialIndex}/${TUTORIAL_MODULES.length}`;
     stageTitle.textContent = module.title;
   } else if (module.kind === "progression") {
-    const progressionIndex = PROGRESSION_MODULES.findIndex((item) => item.id === module.id) + 1;
-    stageModuleLabel.textContent = `Step 2 of 4 - Progression ${progressionIndex}/${PROGRESSION_MODULES.length}`;
-    stageTitle.textContent = module.title;
+    if (module.id === CIRCLE_OF_FIFTHS_MODULE_ID) {
+      stageModuleLabel.textContent = "Step 2 of 4 - Circle of Fifths";
+      stageTitle.textContent = "Circle of Fifths";
+    } else {
+      lastProgressionModuleId = module.id;
+      stageModuleLabel.textContent = "Step 2 of 4 - Common Progressions";
+      stageTitle.textContent = "Common Progressions";
+    }
   } else if (module.kind === "scales") {
     stageModuleLabel.textContent = "Step 3 of 4 - Scales";
     stageTitle.textContent = module.title;
@@ -3537,7 +3729,12 @@ function setActiveModule(moduleId) {
   }
 
   moduleNav.querySelectorAll("button").forEach((button) => {
-    const selected = button.dataset.moduleId === module.id;
+    const selected =
+      button.dataset.moduleGroup === "progressions-common"
+        ? module.kind === "progression" && module.id !== CIRCLE_OF_FIFTHS_MODULE_ID
+        : button.dataset.moduleGroup === "progressions-circle"
+          ? module.id === CIRCLE_OF_FIFTHS_MODULE_ID
+          : button.dataset.moduleId === module.id;
     button.classList.toggle("active", selected);
     button.setAttribute("aria-current", selected ? "page" : "false");
   });

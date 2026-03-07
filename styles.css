@@ -727,6 +727,24 @@ button {
   font-size: 0.84rem;
 }
 
+.circle-of-fifths-wrap {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.45rem;
+}
+
+.circle-of-fifths-svg {
+  width: min(520px, 100%);
+  height: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: color-mix(in oklab, var(--accent-3), white 40%);
+}
+
+.circle-node text {
+  pointer-events: none;
+}
+
 .builder-controls {
   display: grid;
   gap: 0.5rem;
