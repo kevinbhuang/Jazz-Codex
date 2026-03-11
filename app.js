@@ -111,8 +111,8 @@ const shellDiatonicState = {
 };
 
 const secondaryDominantState = {
-  targetRoot: "C",
-  targetQuality: "maj7",
+  key: "C",
+  mode: "major",
 };
 
 const circleOfFifthsState = {
@@ -2693,93 +2693,80 @@ function secondaryDominantProgression(root, quality) {
 }
 
 function renderSecondaryDominantModule() {
-  const targetRoot = secondaryDominantState.targetRoot;
-  const targetQuality = secondaryDominantState.targetQuality;
-  const progression = secondaryDominantProgression(targetRoot, targetQuality);
-  const progressionText = progression.map((item) => formatChordSymbolForDisplay(item.chord)).join(" -> ");
-  const root6Cards = progression
-    .map((item) => renderTutorialShellBuilderCard(item.root, item.quality, 6, "low", false))
-    .join("");
-  const root5Cards = progression
-    .map((item) => renderTutorialShellBuilderCard(item.root, item.quality, 5, "mid", false))
+  const key = secondaryDominantState.key;
+  const mode = secondaryDominantState.mode === "minor" ? "minor" : "major";
+  const degreeChords = scaleChordsForKey(key, mode);
+  const rowMarkup = degreeChords
+    .map((item) => {
+      const targetRoot = parseChordRoot(item.chord) || key;
+      const targetQuality = item.quality;
+      const progression = secondaryDominantProgression(targetRoot, targetQuality);
+      const iiChord = progression[0] ? formatChordSymbolForDisplay(progression[0].chord) : "—";
+      const vChord = progression[1] ? formatChordSymbolForDisplay(progression[1].chord) : "—";
+      return `
+        <tr>
+          <td>${item.roman}</td>
+          <td>${formatChordSymbolForDisplay(item.chord, { includeName: true })}</td>
+          <td>${iiChord} -> ${vChord}</td>
+        </tr>
+      `;
+    })
     .join("");
 
   return `
     <section class="lesson-block">
       <h3>Step 1.4: Secondary Dominant</h3>
-      <p class="tutorial-card-copy"><strong>Goal:</strong> Given a target chord, output the most common jazz <strong>ii-V</strong> that resolves to it.</p>
+      <p class="tutorial-card-copy"><strong>Goal:</strong> Pick a key and quality, then map each diatonic 7th chord to its resolving secondary <strong>ii-V</strong>.</p>
       ${renderJazzNotationAid()}
       <div class="builder-controls">
         <div class="builder-root-wrap">
-          <span>Target root</span>
-          <div class="builder-root-group" role="radiogroup" aria-label="Secondary dominant target root">
+          <span>Key</span>
+          <div class="builder-root-group" role="radiogroup" aria-label="Secondary dominant key">
             ${ROOT_NOTE_OPTIONS.map(
               (note) =>
-                `<button type="button" class="root-choice ${targetRoot === note ? "active" : ""}" data-secondary-root-option="${note}" aria-pressed="${targetRoot === note ? "true" : "false"}">${note}</button>`
+                `<button type="button" class="root-choice ${key === note ? "active" : ""}" data-secondary-key-option="${note}" aria-pressed="${key === note ? "true" : "false"}">${note}</button>`
             ).join("")}
           </div>
         </div>
         <div class="builder-extension-wrap">
-          <span>Target quality</span>
-          <div class="builder-extension-group" role="radiogroup" aria-label="Secondary dominant target quality">
-            ${[
-              { quality: "maj7", label: "maj7" },
-              { quality: "m7", label: "m7" },
-              { quality: "dom7", label: "7" },
-              { quality: "m7b5", label: "m7b5" },
-            ]
-              .map(
-                (item) =>
-                  `<button type="button" class="extension-choice ${targetQuality === item.quality ? "active" : ""}" data-secondary-quality-option="${item.quality}" aria-pressed="${targetQuality === item.quality ? "true" : "false"}">${item.label}</button>`
-              )
-              .join("")}
+          <span>Quality</span>
+          <div class="builder-extension-group" role="radiogroup" aria-label="Secondary dominant key quality">
+            <button type="button" class="extension-choice ${mode === "major" ? "active" : ""}" data-secondary-mode-option="major" aria-pressed="${mode === "major" ? "true" : "false"}">Major</button>
+            <button type="button" class="extension-choice ${mode === "minor" ? "active" : ""}" data-secondary-mode-option="minor" aria-pressed="${mode === "minor" ? "true" : "false"}">Minor</button>
           </div>
         </div>
       </div>
 
-      <p class="tutorial-card-copy"><strong>Result:</strong> <span class="chip">${progressionText || "No valid target chord selected."}</span></p>
+      <p class="tutorial-card-copy"><strong>Key center:</strong> <span class="chip">${key} ${mode}</span></p>
       <div class="table-scroll-wrap">
-        <table class="formula-table major-scale-table">
+        <table class="formula-table">
           <tbody>
-            <tr><th>Function</th>${progression.map((item) => `<td>${item.role}</td>`).join("")}</tr>
-            <tr><th>Chord</th>${progression
-              .map((item) => `<td>${formatChordSymbolForDisplay(item.chord, { includeName: true })}</td>`)
-              .join("")}</tr>
+            <tr>
+              <th>Degree</th>
+              <th>Diatonic 7th Chord</th>
+              <th>Secondary ii-V Resolving To That Chord</th>
+            </tr>
+            ${rowMarkup}
           </tbody>
         </table>
       </div>
-    </section>
-
-    <section class="lesson-block">
-      <h3>6th-String Shells (ii -> V -> I)</h3>
-      <div class="diagram-grid tutorial-grid">${root6Cards || "<p>Unable to build 6th-string shells for this target.</p>"}</div>
-    </section>
-
-    <section class="lesson-block">
-      <h3>5th-String Shells (ii -> V -> I)</h3>
-      <div class="diagram-grid tutorial-grid">${root5Cards || "<p>Unable to build 5th-string shells for this target.</p>"}</div>
     </section>
   `;
 }
 
 function wireSecondaryDominantModule() {
-  lessonContent.querySelectorAll("[data-secondary-root-option]").forEach((button) => {
+  lessonContent.querySelectorAll("[data-secondary-key-option]").forEach((button) => {
     button.addEventListener("click", () => {
-      secondaryDominantState.targetRoot = button.dataset.secondaryRootOption || "C";
+      secondaryDominantState.key = button.dataset.secondaryKeyOption || "C";
       renderLesson();
     });
   });
-  lessonContent.querySelectorAll("[data-secondary-quality-option]").forEach((button) => {
+  lessonContent.querySelectorAll("[data-secondary-mode-option]").forEach((button) => {
     button.addEventListener("click", () => {
-      const quality = button.dataset.secondaryQualityOption;
-      secondaryDominantState.targetQuality = ["maj7", "m7", "dom7", "m7b5"].includes(quality)
-        ? quality
-        : "maj7";
+      secondaryDominantState.mode = button.dataset.secondaryModeOption === "minor" ? "minor" : "major";
       renderLesson();
     });
   });
-
-  wireTutorialChordPlayButtons();
 }
 
 function circleOfFifthsCounterclockwise(root) {
